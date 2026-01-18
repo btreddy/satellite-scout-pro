@@ -46,7 +46,7 @@ const MapController = ({ center }) => {
 
 const RealEstateSearchApp = () => {
   // --- AUTH STATE ---
-  const [session, setSession] = useState(null); // The "Key"
+ const [session, setSession] = useState(true); // <--- Forces you "Logged In" automatically
   const [authLoading, setAuthLoading] = useState(false);
   const [loginStep, setLoginStep] = useState('form'); // 'form' or 'verify'
   
