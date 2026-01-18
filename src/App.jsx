@@ -1,8 +1,9 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polygon, LayersControl, useMapEvents } from 'react-leaflet';
-import { X, Crosshair, Layers, Save, Ruler, Download, Upload, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, MoreVertical } from 'lucide-react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polygon, LayersControl, useMapEvents, useMap } from 'react-leaflet';
+import { X, Crosshair, Save, Ruler, Download, Upload, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, Search } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { supabase } from './supabaseClient'; // Import your cloud connection
 
 // --- Fix Leaflet Icons ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -34,23 +35,33 @@ const calculateAcres = (latLngs) => {
     const j = (i + 1) % latLngs.length;
     const p1 = latLngs[i];
     const p2 = latLngs[j];
-    
-    // Convert to radians
     const lat1 = (p1.lat * Math.PI) / 180;
     const lat2 = (p2.lat * Math.PI) / 180;
     const lng1 = (p1.lng * Math.PI) / 180;
     const lng2 = (p2.lng * Math.PI) / 180;
-
     area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
   }
-  
   area = (Math.abs(area) * earthRadius * earthRadius) / 2;
   return (area / 4046.86).toFixed(2);
+};
+
+// --- COMPONENT: Map Controller (Handles zooming to search results) ---
+const MapController = ({ center }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (center) {
+      map.flyTo(center, 18, { duration: 1.5 });
+    }
+  }, [center, map]);
+  return null;
 };
 
 const RealEstateSearchApp = () => {
   // --- STATE ---
   const [leads, setLeads] = useState([]); 
+  const [filteredLeads, setFilteredLeads] = useState([]); // For Search
+  const [searchQuery, setSearchQuery] = useState(''); // Survey No Search
+  
   const [measurePoints, setMeasurePoints] = useState([]); 
   const [redoStack, setRedoStack] = useState([]); 
   const [isMeasuring, setIsMeasuring] = useState(false);
@@ -63,8 +74,39 @@ const RealEstateSearchApp = () => {
 
   const fileInputRef = useRef(null);
 
-  // --- ACTIONS ---
+  // --- INITIAL LOAD: FETCH FROM SUPABASE ---
+  useEffect(() => {
+    fetchLeads();
+  }, []);
 
+  useEffect(() => {
+    // Filter logic for Search Bar
+    if (!searchQuery) {
+      setFilteredLeads(leads);
+    } else {
+      const lowerQ = searchQuery.toLowerCase();
+      const filtered = leads.filter(l => 
+        (l.survey_no && l.survey_no.toLowerCase().includes(lowerQ)) || 
+        (l.label && l.label.toLowerCase().includes(lowerQ))
+      );
+      setFilteredLeads(filtered);
+    }
+  }, [searchQuery, leads]);
+
+  const fetchLeads = async () => {
+    const { data, error } = await supabase
+      .from('scout_leads')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) console.error('Error fetching leads:', error);
+    else {
+      setLeads(data);
+      setFilteredLeads(data);
+    }
+  };
+
+  // --- ACTIONS ---
   const updatePointPosition = (index, newLatLng) => {
     const updatedPoints = [...measurePoints];
     updatedPoints[index] = newLatLng;
@@ -98,51 +140,51 @@ const RealEstateSearchApp = () => {
     setTempArea(calculateAcres(newPoints));
   };
 
-  const handleSaveShape = (e) => {
+  // --- SAVE TO SUPABASE ---
+  const handleSaveShape = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
+    
     const newLead = {
-      id: Date.now(),
       label: formData.get('label'),
+      survey_no: formData.get('survey_no'), // NEW FIELD
       note: formData.get('note'),
       acres: tempArea,
-      type: 'Polygon',
-      points: measurePoints,
-      center: measurePoints[0],
-      timestamp: new Date().toLocaleString()
+      points: measurePoints, // Auto-converted to JSON by Supabase
+      center: measurePoints[0]
     };
-    setLeads([...leads, newLead]);
-    setMeasurePoints([]);
-    setRedoStack([]);
-    setIsMeasuring(false);
-    setShowSaveForm(false);
-    setShowCoordsPanel(false);
+
+    const { data, error } = await supabase
+      .from('scout_leads')
+      .insert([newLead])
+      .select();
+
+    if (error) {
+      alert('Error saving to cloud: ' + error.message);
+    } else {
+      setLeads([data[0], ...leads]); // Update local state instantly
+      setMeasurePoints([]);
+      setRedoStack([]);
+      setIsMeasuring(false);
+      setShowSaveForm(false);
+      setShowCoordsPanel(false);
+    }
   };
 
-  const handleExport = () => {
-    const dataStr = JSON.stringify(leads, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `land_scout_data_${new Date().toISOString().slice(0,10)}.json`;
-    link.click();
-  };
+  // --- DELETE FROM SUPABASE ---
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this lead?")) return;
 
-  const handleImport = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const importedLeads = JSON.parse(event.target.result);
-        setLeads([...leads, ...importedLeads]);
-        alert(`Successfully imported ${importedLeads.length} leads!`);
-      } catch (err) {
-        alert("Error reading file.");
-      }
-    };
-    reader.readAsText(file);
+    const { error } = await supabase
+      .from('scout_leads')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('Error deleting: ' + error.message);
+    } else {
+      setLeads(leads.filter(l => l.id !== id));
+    }
   };
 
   // --- TOOLS ---
@@ -155,7 +197,7 @@ const RealEstateSearchApp = () => {
   const copyForEarthPro = () => {
     const text = `${centerPos.lat}, ${centerPos.lng}`;
     navigator.clipboard.writeText(text);
-    alert(`COPIED: "${text}"\n\n1. Open Google Earth Pro (Desktop App)\n2. Paste this into the Search Box (Top Left)\n3. Use the 'Clock' icon to see history.`);
+    alert(`COPIED: "${text}"\n\nPaste into Google Earth Pro to check History.`);
     setShowToolsMenu(false);
   };
 
@@ -226,6 +268,38 @@ const RealEstateSearchApp = () => {
              <Crosshair className="text-red-600"/> Satellite Scout Pro
            </h1>
         </div>
+
+        {/* --- NEW: SURVEY NUMBER SEARCH BAR --- */}
+        <div className="flex-1 max-w-md mx-4 relative">
+          <div className="flex items-center bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200">
+            <Search size={18} className="text-gray-500 mr-2"/>
+            <input 
+              type="text"
+              placeholder="Search Survey No / Owner Name..."
+              className="bg-transparent border-none outline-none text-sm w-full"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')}><X size={14} className="text-gray-400"/></button>
+            )}
+          </div>
+          {/* Live Search Results Dropdown */}
+          {searchQuery && filteredLeads.length > 0 && (
+            <div className="absolute top-full left-0 right-0 bg-white mt-1 shadow-xl rounded-lg border border-gray-100 z-50 max-h-60 overflow-y-auto">
+              {filteredLeads.map(lead => (
+                <div 
+                  key={lead.id} 
+                  onClick={() => { setCenterPos(lead.center); setSearchQuery(''); }}
+                  className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0"
+                >
+                  <div className="font-bold text-sm text-gray-800">{lead.survey_no || 'No Survey #'}</div>
+                  <div className="text-xs text-gray-500">{lead.label} • {lead.acres} Ac</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         
         <div className="flex items-center gap-2">
           {/* Measure Controls */}
@@ -242,24 +316,12 @@ const RealEstateSearchApp = () => {
             
             {isMeasuring && (
               <>
-                <button onClick={handleUndo} disabled={measurePoints.length === 0} className="p-1.5 hover:bg-white hover:shadow rounded-md disabled:opacity-30 text-gray-600" title="Undo">
-                  <RotateCcw size={18}/>
-                </button>
-                <button onClick={handleRedo} disabled={redoStack.length === 0} className="p-1.5 hover:bg-white hover:shadow rounded-md disabled:opacity-30 text-gray-600" title="Redo">
-                  <RotateCw size={18}/>
-                </button>
-                <button onClick={() => setShowCoordsPanel(!showCoordsPanel)} className={`p-1.5 hover:shadow rounded-md ${showCoordsPanel ? 'bg-blue-100 text-blue-600' : 'hover:bg-white text-gray-600'}`} title="Edit Coordinates">
-                  <Edit3 size={18}/>
-                </button>
+                <button onClick={handleUndo} disabled={measurePoints.length === 0} className="p-1.5 hover:bg-white hover:shadow rounded-md disabled:opacity-30 text-gray-600" title="Undo"><RotateCcw size={18}/></button>
+                <button onClick={handleRedo} disabled={redoStack.length === 0} className="p-1.5 hover:bg-white hover:shadow rounded-md disabled:opacity-30 text-gray-600" title="Redo"><RotateCw size={18}/></button>
+                <button onClick={() => setShowCoordsPanel(!showCoordsPanel)} className={`p-1.5 hover:shadow rounded-md ${showCoordsPanel ? 'bg-blue-100 text-blue-600' : 'hover:bg-white text-gray-600'}`} title="Edit Coordinates"><Edit3 size={18}/></button>
               </>
             )}
           </div>
-
-          <div className="h-6 w-px bg-gray-300 mx-1"></div>
-
-          <button onClick={handleExport} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Export Data"><Download size={20}/></button>
-          <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Import Data"><Upload size={20}/></button>
-          <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json" />
 
           <div className="h-6 w-px bg-gray-300 mx-1"></div>
 
@@ -275,24 +337,9 @@ const RealEstateSearchApp = () => {
              {showToolsMenu && (
                 <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 z-[5001] animate-in fade-in zoom-in duration-150">
                    <div className="text-[10px] font-bold text-gray-400 uppercase px-2 mb-1">External Apps</div>
-                   
-                   <button onClick={openGoogleEarth} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
-                      <ExternalLink size={14}/> Open Google Earth (Web)
-                   </button>
-                   
-                   <button onClick={copyForEarthPro} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
-                      <Copy size={14}/> Copy Coords (For Desktop)
-                   </button>
-
-                   <button onClick={openBhuvan} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
-                      <div className="w-4"/> {/* Spacer */}
-                      <span className="flex-1">Open Bhuvan (Govt)</span>
-                   </button>
-                   
-                   <div className="border-t my-1 bg-gray-100"></div>
-                   <div className="bg-yellow-50 p-2 rounded text-[10px] text-yellow-800 leading-tight">
-                      <strong>Tip:</strong> Browsers cannot open Desktop apps directly. Use "Copy Coords", then Paste in Earth Pro to check History.
-                   </div>
+                   <button onClick={openGoogleEarth} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"><ExternalLink size={14}/> Open Google Earth (Web)</button>
+                   <button onClick={copyForEarthPro} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"><Copy size={14}/> Copy Coords (For Desktop)</button>
+                   <button onClick={openBhuvan} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"><div className="w-4"/> <span className="flex-1">Open Bhuvan (Govt)</span></button>
                 </div>
              )}
           </div>
@@ -341,6 +388,9 @@ const RealEstateSearchApp = () => {
           
           <MapContainer center={centerPos} zoom={18} maxZoom={22} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
             
+            {/* Auto-Zoom Controller */}
+            <MapController center={centerPos} />
+
             <LayersControl position="topright">
               <LayersControl.BaseLayer checked name="Google Hybrid">
                 <TileLayer
@@ -369,14 +419,22 @@ const RealEstateSearchApp = () => {
               </>
             )}
 
-            {leads.map((lead) => (
+            {filteredLeads.map((lead) => (
               <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }}>
                 <Popup>
                   <div className="text-center">
                     <strong className="text-lg block">{lead.label}</strong>
-                    <span className="text-sm bg-green-100 text-green-800 px-2 py-0.5 rounded">{lead.acres} Acres</span>
+                    
+                    {/* SURVEY NUMBER DISPLAY */}
+                    {lead.survey_no && (
+                      <div className="bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded inline-block mt-1 border border-yellow-200">
+                        Sy No: {lead.survey_no}
+                      </div>
+                    )}
+
+                    <div className="text-sm text-gray-600 mt-2">{lead.acres} Acres</div>
                     <p className="text-xs text-gray-500 mt-2 italic border-t pt-1">{lead.note}</p>
-                    <button onClick={() => setLeads(leads.filter(l => l.id !== lead.id))} className="mt-2 text-red-500 text-xs flex items-center justify-center gap-1 w-full hover:bg-red-50 p-1 rounded">
+                    <button onClick={() => handleDelete(lead.id)} className="mt-2 text-red-500 text-xs flex items-center justify-center gap-1 w-full hover:bg-red-50 p-1 rounded">
                       <Trash2 size={10}/> Delete
                     </button>
                   </div>
@@ -406,13 +464,20 @@ const RealEstateSearchApp = () => {
                 <label className="block text-sm font-medium mb-1">Label / Name</label>
                 <input name="label" required autoFocus className="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-500" placeholder="e.g. Reddy Farm" />
               </div>
+
+              {/* NEW SURVEY NO FIELD */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Survey Number</label>
+                <input name="survey_no" className="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-500" placeholder="e.g. 142/A" />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Notes</label>
-                <textarea name="note" className="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-500" rows="2" placeholder="Road width, survey no..." />
+                <textarea name="note" className="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-500" rows="2" placeholder="Road width, link docs..." />
               </div>
               <div className="flex gap-2 pt-2">
                  <button type="button" onClick={() => setShowSaveForm(false)} className="flex-1 py-2 bg-gray-100 rounded font-semibold">Cancel</button>
-                 <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700">Save</button>
+                 <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700">Save to Cloud</button>
               </div>
             </form>
           </div>
