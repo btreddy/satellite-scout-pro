@@ -45,8 +45,8 @@ const MapController = ({ center }) => {
 };
 
 const RealEstateSearchApp = () => {
-  // --- AUTH STATE ---
-  const [session, setSession] = useState(true); // Default to TRUE (Bypassed) for now
+  // --- AUTH STATE (Currently Bypassed for Work) ---
+  const [session, setSession] = useState(true); 
   
   // --- APP STATE ---
   const [leads, setLeads] = useState([]); 
@@ -83,7 +83,7 @@ const RealEstateSearchApp = () => {
     else { setLeads(data); setFilteredLeads(data); }
   };
 
-  // --- SMART IMPORT FUNCTION (Handles SW Maps) ---
+  // --- SMART IMPORT LOGIC (Updated for Lines/Tracks) ---
   const handleImport = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -94,31 +94,38 @@ const RealEstateSearchApp = () => {
         const json = JSON.parse(event.target.result);
         let newLeads = [];
 
-        // CASE A: It's a GeoJSON file (from SW Maps)
+        // CASE A: GeoJSON (SW Maps)
         if (json.type === 'FeatureCollection' && json.features) {
-           const confirmImport = window.confirm(`Detected SW Maps file with ${json.features.length} features. Import them?`);
+           const confirmImport = window.confirm(`Found ${json.features.length} items. Import them?`);
            if(!confirmImport) return;
 
            for (const feature of json.features) {
-              // Extract Coordinates (GeoJSON is [Lng, Lat], we need {lat, lng})
-              let points = [];
+              let rawCoords = [];
               
-              if (feature.geometry.type === 'Polygon') {
-                 // Polygons are often nested [[[lng,lat],...]]
-                 points = feature.geometry.coordinates[0].map(coord => ({ lat: coord[1], lng: coord[0] }));
-              } else if (feature.geometry.type === 'LineString') {
-                 points = feature.geometry.coordinates.map(coord => ({ lat: coord[1], lng: coord[0] }));
-              } else if (feature.geometry.type === 'Point') {
-                 // Skip single points for now, or handle as a marker
-                 continue; 
+              // Handle various geometry types (Line, Polygon, MultiPolygon)
+              const type = feature.geometry.type;
+              
+              if (type === 'Polygon') {
+                 rawCoords = feature.geometry.coordinates[0]; 
+              } else if (type === 'MultiPolygon') {
+                 rawCoords = feature.geometry.coordinates[0][0];
+              } else if (type === 'LineString') {
+                 // Convert Track Line to Polygon
+                 rawCoords = feature.geometry.coordinates;
+              } else if (type === 'MultiLineString') {
+                 rawCoords = feature.geometry.coordinates[0];
               }
 
-              if (points.length > 0) {
+              // Convert [Lng, Lat] to {lat, lng}
+              const points = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
+
+              if (points.length > 2) {
                  const acres = calculateAcres(points);
-                 const name = feature.properties?.name || feature.properties?.Name || 'SW Maps Import';
-                 const note = `Imported from SW Maps. Desc: ${feature.properties?.description || ''}`;
+                 // Try to find a name property, fallback to 'Imported'
+                 const props = feature.properties || {};
+                 const name = props.name || props.Name || props.NAME || `SW Import ${new Date().toLocaleTimeString()}`;
+                 const note = `Imported Track. Desc: ${props.description || 'None'}`;
                  
-                 // Save to Supabase immediately
                  const { data } = await supabase.from('scout_leads').insert([{
                     label: name,
                     note: note,
@@ -130,29 +137,27 @@ const RealEstateSearchApp = () => {
                  if(data) newLeads.push(data[0]);
               }
            }
+           
            if (newLeads.length > 0) {
               setLeads([...newLeads, ...leads]);
-              alert(`Successfully imported ${newLeads.length} lands from SW Maps!`);
+              alert(`Success! Imported ${newLeads.length} lands.`);
            } else {
-              alert("No valid polygons found in this GeoJSON file.");
+              alert("Could not extract valid shapes. Ensure you exported 'Tracks' or 'Polygons'.");
            }
         } 
         
-        // CASE B: It's our own Backup file (Array)
+        // CASE B: Standard Backup
         else if (Array.isArray(json)) {
-           // This logic usually just loads them locally, but let's ask to save to cloud?
-           // For now, let's just merge local state like before
            setLeads([...leads, ...json]);
-           alert(`Loaded ${json.length} leads from backup.`);
+           alert(`Restored ${json.length} leads from backup.`);
         }
 
       } catch (err) {
         console.error(err);
-        alert("Error reading file. Make sure it is a valid JSON or GeoJSON.");
+        alert("Error reading file. Please check the format.");
       }
     };
     reader.readAsText(file);
-    // Reset input so same file can be selected again if needed
     e.target.value = null; 
   };
 
