@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polygon, LayersControl, useMapEvents, useMap } from 'react-leaflet';
-import { X, Crosshair, Save, Ruler, Upload, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, Search } from 'lucide-react';
+import { X, Crosshair, Save, Ruler, Upload, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, Move } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { supabase } from './supabaseClient';
@@ -57,7 +57,7 @@ const RealEstateSearchApp = () => {
   const [measurePoints, setMeasurePoints] = useState([]); 
   const [redoStack, setRedoStack] = useState([]); 
   const [isMeasuring, setIsMeasuring] = useState(false);
-  const [editingLead, setEditingLead] = useState(null); // Tracks which lead we are editing
+  const [editingLead, setEditingLead] = useState(null); 
   
   const [showCoordsPanel, setShowCoordsPanel] = useState(false);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -65,6 +65,8 @@ const RealEstateSearchApp = () => {
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [tempArea, setTempArea] = useState(0);
 
+  // Store drag start position to calculate shift
+  const dragStartPos = useRef(null);
   const fileInputRef = useRef(null);
 
   // --- INITIAL LOAD ---
@@ -87,22 +89,30 @@ const RealEstateSearchApp = () => {
     else { setLeads(data); setFilteredLeads(data); }
   };
 
-  // --- NEW: HANDLE EDIT EXISTING SHAPE ---
+  // --- NEW: SIMPLIFY SHAPE (Reduce Vertices) ---
+  const handleSimplify = () => {
+    if (measurePoints.length < 6) return alert("Shape is already simple enough.");
+    
+    // Aggressive simplify: Keep 1 out of every 5 points (approx)
+    // Always keep start and end points to maintain closure
+    const simplified = measurePoints.filter((_, i) => i === 0 || i % 4 === 0 || i === measurePoints.length - 1);
+    
+    setRedoStack([...redoStack, measurePoints]); // Save original to undo stack just in case
+    setMeasurePoints(simplified);
+    setTempArea(calculateAcres(simplified));
+  };
+
   const handleEditShape = (lead) => {
-    // 1. Load the shape points into the "Measuring" tool
     setMeasurePoints(lead.points);
     setTempArea(lead.acres);
-    
-    // 2. Set "Editing Mode" so we know to UPDATE not INSERT later
     setEditingLead(lead);
-    
-    // 3. Turn on the UI
+    setCenterPos(lead.center); // Move center marker to shape center
     setIsMeasuring(true);
     setShowCoordsPanel(true);
     setRedoStack([]);
   };
 
-  // --- IMPORT LOGIC (Same as before) ---
+  // --- IMPORT LOGIC ---
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -162,7 +172,6 @@ const RealEstateSearchApp = () => {
     e.target.value = null; 
   };
 
-  // --- STANDARD FUNCTIONS ---
   const updatePointPosition = (index, newLatLng) => {
     const updatedPoints = [...measurePoints];
     updatedPoints[index] = newLatLng;
@@ -196,7 +205,6 @@ const RealEstateSearchApp = () => {
     setTempArea(calculateAcres(newPoints));
   };
 
-  // --- UPDATED SAVE LOGIC (Handles Both NEW and EDIT) ---
   const handleSaveShape = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -211,29 +219,16 @@ const RealEstateSearchApp = () => {
     };
 
     if (editingLead) {
-      // --- UPDATE EXISTING ---
-      const { error } = await supabase
-        .from('scout_leads')
-        .update(leadData)
-        .eq('id', editingLead.id); // IMPORTANT: Find by ID
-
-      if (error) { 
-        alert('Update failed: ' + error.message); 
-      } else {
-        // Update local state by replacing the old item
+      const { error } = await supabase.from('scout_leads').update(leadData).eq('id', editingLead.id);
+      if (error) { alert('Update failed: ' + error.message); } 
+      else {
         setLeads(leads.map(l => l.id === editingLead.id ? { ...l, ...leadData } : l));
         finishSave();
       }
     } else {
-      // --- CREATE NEW ---
-      const { data, error } = await supabase
-        .from('scout_leads')
-        .insert([leadData])
-        .select();
-
-      if (error) { 
-        alert('Save failed: ' + error.message); 
-      } else {
+      const { data, error } = await supabase.from('scout_leads').insert([leadData]).select();
+      if (error) { alert('Save failed: ' + error.message); } 
+      else {
         setLeads([data[0], ...leads]);
         finishSave();
       }
@@ -244,7 +239,7 @@ const RealEstateSearchApp = () => {
     setMeasurePoints([]);
     setRedoStack([]);
     setIsMeasuring(false);
-    setEditingLead(null); // Clear editing mode
+    setEditingLead(null); 
     setShowSaveForm(false);
     setShowCoordsPanel(false);
   };
@@ -271,10 +266,43 @@ const RealEstateSearchApp = () => {
     return null;
   };
 
+  // --- UPDATED: DRAG WHOLE SHAPE ---
   const DraggableMarker = () => {
     const markerRef = useRef(null);
-    const eventHandlers = useMemo(() => ({ dragend() { const marker = markerRef.current; if (marker != null) setCenterPos(marker.getLatLng()); }, }), []);
-    return <Marker draggable={true} eventHandlers={eventHandlers} position={centerPos} ref={markerRef}><Popup>Search Center</Popup></Marker>;
+    
+    const eventHandlers = useMemo(() => ({
+      dragstart(e) {
+        // Record where the drag started
+        dragStartPos.current = e.target.getLatLng();
+      },
+      dragend(e) {
+        const newCenter = e.target.getLatLng();
+        
+        // If we are currently editing a shape, dragging the center should MOVE THE SHAPE
+        if (isMeasuring && measurePoints.length > 0 && dragStartPos.current) {
+           const latShift = newCenter.lat - dragStartPos.current.lat;
+           const lngShift = newCenter.lng - dragStartPos.current.lng;
+           
+           const shiftedPoints = measurePoints.map(p => ({
+             lat: p.lat + latShift,
+             lng: p.lng + lngShift
+           }));
+           
+           setMeasurePoints(shiftedPoints);
+           // Don't update area, shape is just moving, not changing size
+        }
+
+        setCenterPos(newCenter);
+      },
+    }), [isMeasuring, measurePoints]); // Re-bind if measuring state changes
+
+    return (
+      <Marker draggable={true} eventHandlers={eventHandlers} position={centerPos} ref={markerRef}>
+        <Popup>
+           {isMeasuring ? "Drag me to move the whole shape!" : "Search Center"}
+        </Popup>
+      </Marker>
+    );
   };
 
   const DraggableVertex = ({ position, index }) => {
@@ -356,7 +384,17 @@ const RealEstateSearchApp = () => {
                  <h3 className="font-bold text-gray-700 text-sm">{editingLead ? 'Editing Shape' : 'Vertex Editor'}</h3>
                  <button onClick={() => setShowCoordsPanel(false)}><X size={16}/></button>
               </div>
-              <div className="p-4 space-y-4">{measurePoints.map((pt, i) => (<div key={i} className="bg-gray-50 p-2 rounded border border-gray-200 text-xs"><div className="flex justify-between mb-1 font-bold text-gray-500">Point {i + 1}</div><div className="grid grid-cols-2 gap-2"><div><label className="text-[10px] text-gray-400">Lat</label><input type="number" step="0.00001" className="w-full border rounded p-1" value={pt.lat} onChange={(e) => handleCoordInput(i, 'lat', e.target.value)} /></div><div><label className="text-[10px] text-gray-400">Lng</label><input type="number" step="0.00001" className="w-full border rounded p-1" value={pt.lng} onChange={(e) => handleCoordInput(i, 'lng', e.target.value)} /></div></div></div>))}</div>
+              <div className="p-4 space-y-4">
+                 {/* SIMPLIFY BUTTON */}
+                 <button 
+                   onClick={handleSimplify} 
+                   className="w-full bg-blue-50 text-blue-700 py-2 rounded-lg text-xs font-bold border border-blue-200 hover:bg-blue-100 flex items-center justify-center gap-2 mb-2"
+                 >
+                   <Zap size={14}/> Simplify Shape (Reduce Points)
+                 </button>
+                 
+                 {measurePoints.map((pt, i) => (<div key={i} className="bg-gray-50 p-2 rounded border border-gray-200 text-xs"><div className="flex justify-between mb-1 font-bold text-gray-500">Point {i + 1}</div><div className="grid grid-cols-2 gap-2"><div><label className="text-[10px] text-gray-400">Lat</label><input type="number" step="0.00001" className="w-full border rounded p-1" value={pt.lat} onChange={(e) => handleCoordInput(i, 'lat', e.target.value)} /></div><div><label className="text-[10px] text-gray-400">Lng</label><input type="number" step="0.00001" className="w-full border rounded p-1" value={pt.lng} onChange={(e) => handleCoordInput(i, 'lng', e.target.value)} /></div></div></div>))}
+              </div>
               <div className="p-4 border-t mt-auto sticky bottom-0 bg-white"><div className="flex justify-between items-center mb-2"><span className="text-gray-500 text-xs">Total Area</span><span className="font-bold text-orange-600 text-lg">{tempArea} Ac</span></div><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold disabled:opacity-50 hover:bg-green-700">{editingLead ? 'Update Shape' : 'Save Shape'}</button></div>
            </div>
         )}
@@ -372,11 +410,9 @@ const RealEstateSearchApp = () => {
             {/* ACTIVE DRAWING (Orange) */}
             {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
             
-            {/* SAVED LEADS (Green) - Hidden if editing! */}
+            {/* SAVED LEADS (Green) */}
             {filteredLeads.map((lead) => {
-               // Don't show the Green shape if we are currently editing it (prevents ghosting)
                if(editingLead && editingLead.id === lead.id) return null;
-               
                return (
                 <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }}>
                   <Popup>
@@ -385,22 +421,17 @@ const RealEstateSearchApp = () => {
                       {lead.survey_no && <div className="bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded inline-block mt-1 border border-yellow-200">Sy No: {lead.survey_no}</div>}
                       <div className="text-sm text-gray-600 mt-2">{lead.acres} Acres</div>
                       <p className="text-xs text-gray-500 mt-2 italic border-t pt-1">{lead.note}</p>
-                      
-                      {/* --- NEW BUTTONS --- */}
                       <div className="flex gap-2 mt-2">
-                        <button onClick={() => handleEditShape(lead)} className="flex-1 bg-blue-50 text-blue-600 text-xs flex items-center justify-center gap-1 hover:bg-blue-100 p-1.5 rounded border border-blue-200 font-bold">
-                          <Edit3 size={12}/> Modify
-                        </button>
-                        <button onClick={() => handleDelete(lead.id)} className="flex-1 bg-red-50 text-red-500 text-xs flex items-center justify-center gap-1 hover:bg-red-100 p-1.5 rounded border border-red-200">
-                          <Trash2 size={12}/> Delete
-                        </button>
+                        <button onClick={() => handleEditShape(lead)} className="flex-1 bg-blue-50 text-blue-600 text-xs flex items-center justify-center gap-1 hover:bg-blue-100 p-1.5 rounded border border-blue-200 font-bold"><Edit3 size={12}/> Modify</button>
+                        <button onClick={() => handleDelete(lead.id)} className="flex-1 bg-red-50 text-red-500 text-xs flex items-center justify-center gap-1 hover:bg-red-100 p-1.5 rounded border border-red-200"><Trash2 size={12}/> Delete</button>
                       </div>
                     </div>
                   </Popup>
                 </Polygon>
               );
             })}
-
+            
+            {/* THIS IS THE NEW DRAGGABLE CENTER MARKER */}
             <DraggableMarker />
             <MapClickHandler />
           </MapContainer>
@@ -416,12 +447,9 @@ const RealEstateSearchApp = () => {
             </h2>
             <form onSubmit={handleSaveShape} className="space-y-4">
               <div className="bg-orange-50 p-3 rounded text-center border border-orange-100"><span className="text-xs text-gray-500 uppercase font-bold">Calculated Area</span><div className="text-2xl font-bold text-orange-600">{tempArea} Acres</div></div>
-              
-              {/* Pre-fill data if editing */}
               <div><label className="block text-sm font-medium mb-1">Label / Name</label><input name="label" defaultValue={editingLead?.label} required autoFocus className="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-500" placeholder="e.g. Reddy Farm" /></div>
               <div><label className="block text-sm font-medium mb-1">Survey Number</label><input name="survey_no" defaultValue={editingLead?.survey_no} className="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-500" placeholder="e.g. 142/A" /></div>
               <div><label className="block text-sm font-medium mb-1">Notes</label><textarea name="note" defaultValue={editingLead?.note} className="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-500" rows="2" placeholder="Road width, link docs..." /></div>
-              
               <div className="flex gap-2 pt-2"><button type="button" onClick={() => setShowSaveForm(false)} className="flex-1 py-2 bg-gray-100 rounded font-semibold">Cancel</button><button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700">{editingLead ? 'Update Changes' : 'Save New'}</button></div>
             </form>
           </div>
