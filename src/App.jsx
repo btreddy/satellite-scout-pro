@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polygon, LayersControl, useMapEvents, useMap } from 'react-leaflet';
-import { X, Crosshair, Save, Ruler, Download, Upload, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, Search, Lock, UserCheck, Smartphone, Mail, ArrowRight } from 'lucide-react';
+import { X, Crosshair, Save, Ruler, Download, Upload, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, Search, Lock, UserCheck, Smartphone, Mail, ArrowRight, FileJson } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { supabase } from './supabaseClient';
@@ -46,9 +46,7 @@ const MapController = ({ center }) => {
 
 const RealEstateSearchApp = () => {
   // --- AUTH STATE ---
- const [session, setSession] = useState(true); // <--- Forces you "Logged In" automatically
-  const [authLoading, setAuthLoading] = useState(false);
-  const [loginStep, setLoginStep] = useState('form'); // 'form' or 'verify'
+  const [session, setSession] = useState(true); // Default to TRUE (Bypassed) for now
   
   // --- APP STATE ---
   const [leads, setLeads] = useState([]); 
@@ -65,55 +63,11 @@ const RealEstateSearchApp = () => {
 
   const fileInputRef = useRef(null);
 
-  // --- 1. AUTHENTICATION LOGIC ---
+  // --- INITIAL DATA FETCH ---
   useEffect(() => {
-    // Check if user has an active session in local storage
-    const storedSession = sessionStorage.getItem('scout_session');
-    if (storedSession) {
-       setSession(JSON.parse(storedSession));
-       fetchLeads(); // Load data only if logged in
-    }
+    fetchLeads();
   }, []);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setAuthLoading(true);
-    const formData = new FormData(e.target);
-    const email = formData.get('email');
-    const phone = formData.get('phone');
-    const name = formData.get('name');
-
-    try {
-      // 1. Send Magic Link (Passwordless Email Login)
-      const { error } = await supabase.auth.signInWithOtp({ email });
-      if (error) throw error;
-
-      // 2. Log this attempt in your database
-      await supabase.from('user_logins').insert([{ name, phone, email }]);
-
-      alert('Check your email for the Login Link!');
-      setLoginStep('verify'); // In a real app, you'd show a "Check Email" screen
-      
-    } catch (error) {
-      alert(error.error_description || error.message);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  // --- SUPABASE AUTH LISTENER (Real Login) ---
-  useEffect(() => {
-    supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setSession(session);
-        sessionStorage.setItem('scout_session', JSON.stringify(session));
-        fetchLeads();
-      }
-    });
-  }, []);
-
-
-  // --- APP LOGIC (Same as before) ---
   useEffect(() => {
     if (!searchQuery) { setFilteredLeads(leads); } 
     else {
@@ -127,6 +81,79 @@ const RealEstateSearchApp = () => {
     const { data, error } = await supabase.from('scout_leads').select('*').order('created_at', { ascending: false });
     if (error) console.error('Error fetching leads:', error);
     else { setLeads(data); setFilteredLeads(data); }
+  };
+
+  // --- SMART IMPORT FUNCTION (Handles SW Maps) ---
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = JSON.parse(event.target.result);
+        let newLeads = [];
+
+        // CASE A: It's a GeoJSON file (from SW Maps)
+        if (json.type === 'FeatureCollection' && json.features) {
+           const confirmImport = window.confirm(`Detected SW Maps file with ${json.features.length} features. Import them?`);
+           if(!confirmImport) return;
+
+           for (const feature of json.features) {
+              // Extract Coordinates (GeoJSON is [Lng, Lat], we need {lat, lng})
+              let points = [];
+              
+              if (feature.geometry.type === 'Polygon') {
+                 // Polygons are often nested [[[lng,lat],...]]
+                 points = feature.geometry.coordinates[0].map(coord => ({ lat: coord[1], lng: coord[0] }));
+              } else if (feature.geometry.type === 'LineString') {
+                 points = feature.geometry.coordinates.map(coord => ({ lat: coord[1], lng: coord[0] }));
+              } else if (feature.geometry.type === 'Point') {
+                 // Skip single points for now, or handle as a marker
+                 continue; 
+              }
+
+              if (points.length > 0) {
+                 const acres = calculateAcres(points);
+                 const name = feature.properties?.name || feature.properties?.Name || 'SW Maps Import';
+                 const note = `Imported from SW Maps. Desc: ${feature.properties?.description || ''}`;
+                 
+                 // Save to Supabase immediately
+                 const { data } = await supabase.from('scout_leads').insert([{
+                    label: name,
+                    note: note,
+                    acres: acres,
+                    points: points,
+                    center: points[0]
+                 }]).select();
+                 
+                 if(data) newLeads.push(data[0]);
+              }
+           }
+           if (newLeads.length > 0) {
+              setLeads([...newLeads, ...leads]);
+              alert(`Successfully imported ${newLeads.length} lands from SW Maps!`);
+           } else {
+              alert("No valid polygons found in this GeoJSON file.");
+           }
+        } 
+        
+        // CASE B: It's our own Backup file (Array)
+        else if (Array.isArray(json)) {
+           // This logic usually just loads them locally, but let's ask to save to cloud?
+           // For now, let's just merge local state like before
+           setLeads([...leads, ...json]);
+           alert(`Loaded ${json.length} leads from backup.`);
+        }
+
+      } catch (err) {
+        console.error(err);
+        alert("Error reading file. Make sure it is a valid JSON or GeoJSON.");
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be selected again if needed
+    e.target.value = null; 
   };
 
   const updatePointPosition = (index, newLatLng) => {
@@ -220,83 +247,7 @@ const RealEstateSearchApp = () => {
     return <Marker draggable={true} eventHandlers={eventHandlers} position={position} icon={EditIcon} ref={markerRef}><Popup>Pt {index + 1}</Popup></Marker>;
   };
 
-  // --- IF NOT LOGGED IN, SHOW GATEKEEPER ---
-  if (!session) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Background Animation */}
-        <div className="absolute inset-0 z-0">
-           <img src="https://images.unsplash.com/photo-1524813686514-a5756c97759e?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80" className="w-full h-full object-cover opacity-20 blur-sm" alt="Map BG" />
-        </div>
-
-        <div className="bg-white z-10 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-500">
-          <div className="bg-blue-600 p-6 text-center">
-             <Crosshair className="w-12 h-12 text-white mx-auto mb-2"/>
-             <h1 className="text-2xl font-bold text-white">Satellite Scout Pro</h1>
-             <p className="text-blue-100 text-sm">Professional Land Identification System</p>
-          </div>
-          
-          <div className="p-8">
-            {loginStep === 'form' ? (
-              <>
-                <h2 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
-                   <Lock className="w-5 h-5 text-orange-500"/> Request Access
-                </h2>
-                <p className="text-sm text-gray-500 mb-6">Enter your verified details to generate a secure session key.</p>
-                
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Full Name</label>
-                    <div className="flex items-center border rounded-lg bg-gray-50 px-3 py-2">
-                       <UserCheck className="w-4 h-4 text-gray-400 mr-2"/>
-                       <input name="name" required className="bg-transparent w-full outline-none text-sm" placeholder="Your Name" />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">WhatsApp Number</label>
-                    <div className="flex items-center border rounded-lg bg-gray-50 px-3 py-2">
-                       <Smartphone className="w-4 h-4 text-gray-400 mr-2"/>
-                       <input name="phone" required className="bg-transparent w-full outline-none text-sm" placeholder="+91 9848..." />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Address</label>
-                    <div className="flex items-center border rounded-lg bg-gray-50 px-3 py-2">
-                       <Mail className="w-4 h-4 text-gray-400 mr-2"/>
-                       <input name="email" type="email" required className="bg-transparent w-full outline-none text-sm" placeholder="name@company.com" />
-                    </div>
-                  </div>
-
-                  <button 
-                    disabled={authLoading}
-                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 mt-4"
-                  >
-                    {authLoading ? 'Verifying...' : <>Get Access Key <ArrowRight size={18}/></>}
-                  </button>
-                  
-                  <p className="text-xs text-center text-gray-400 mt-4">
-                     Protected by SafeLand Security. By entering, you agree to our terms.
-                  </p>
-                </form>
-              </>
-            ) : (
-               <div className="text-center py-8">
-                  <Mail className="w-16 h-16 text-green-500 mx-auto mb-4 animate-bounce"/>
-                  <h3 className="text-xl font-bold text-gray-800">Check Your Email</h3>
-                  <p className="text-gray-500 mt-2 text-sm">We sent a magic link to your inbox.</p>
-                  <p className="text-gray-500 text-sm">Click it to unlock the map instantly.</p>
-                  <button onClick={() => setLoginStep('form')} className="mt-6 text-blue-600 text-sm hover:underline">Try different email</button>
-               </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // --- MAIN APP (If Session Exists) ---
+  // --- RENDER ---
   return (
     <div className="min-h-screen bg-gray-50 font-sans flex flex-col overflow-hidden">
       
@@ -328,18 +279,7 @@ const RealEstateSearchApp = () => {
         </div>
         
         <div className="flex items-center gap-2">
-          {/* LOGOUT BUTTON (New) */}
-          <button 
-             onClick={() => { 
-                supabase.auth.signOut(); 
-                sessionStorage.removeItem('scout_session'); 
-                setSession(null); 
-             }} 
-             className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded border border-red-200 mr-2"
-          >
-             Exit
-          </button>
-
+          
           <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
             <button onClick={() => { setIsMeasuring(!isMeasuring); if(!isMeasuring) { setMeasurePoints([]); setRedoStack([]); } }} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold border transition-colors ${isMeasuring ? 'bg-orange-500 text-white border-orange-600' : 'text-gray-600 hover:bg-gray-200'}`}>
               <Ruler size={16}/> {isMeasuring ? 'Stop' : 'Measure'}
@@ -353,6 +293,15 @@ const RealEstateSearchApp = () => {
             )}
           </div>
           
+          <div className="h-6 w-px bg-gray-300 mx-1"></div>
+
+          {/* IMPORT BUTTON */}
+          <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Import SW Maps / Backup">
+            <Upload size={20}/>
+          </button>
+          <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json,.geojson,.kml" />
+
+          {/* TOOLS MENU */}
           <div className="relative">
              <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${showToolsMenu ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}><Globe size={16}/> Tools</button>
              {showToolsMenu && (
