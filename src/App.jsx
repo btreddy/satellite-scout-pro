@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polygon, LayersControl, useMapEvents, useMap } from 'react-leaflet';
-import { X, Crosshair, Save, Ruler, Download, Upload, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, Search, Lock, UserCheck, Smartphone, Mail, ArrowRight, FileJson } from 'lucide-react';
+import { X, Crosshair, Save, Ruler, Upload, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, Search } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { supabase } from './supabaseClient';
@@ -45,7 +45,7 @@ const MapController = ({ center }) => {
 };
 
 const RealEstateSearchApp = () => {
-  // --- AUTH STATE (Currently Bypassed for Work) ---
+  // --- AUTH STATE (Bypassed) ---
   const [session, setSession] = useState(true); 
   
   // --- APP STATE ---
@@ -63,7 +63,7 @@ const RealEstateSearchApp = () => {
 
   const fileInputRef = useRef(null);
 
-  // --- INITIAL DATA FETCH ---
+  // --- INITIAL LOAD ---
   useEffect(() => {
     fetchLeads();
   }, []);
@@ -83,8 +83,8 @@ const RealEstateSearchApp = () => {
     else { setLeads(data); setFilteredLeads(data); }
   };
 
-  // --- SMART IMPORT LOGIC (Updated for Lines/Tracks) ---
-  const handleImport = (e) => {
+  // --- FIXED IMPORT LOGIC ---
+  const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -92,75 +92,83 @@ const RealEstateSearchApp = () => {
     reader.onload = async (event) => {
       try {
         const json = JSON.parse(event.target.result);
-        let newLeads = [];
+        const importedLeads = [];
 
-        // CASE A: GeoJSON (SW Maps)
+        // Handle GeoJSON (SW Maps)
         if (json.type === 'FeatureCollection' && json.features) {
-           const confirmImport = window.confirm(`Found ${json.features.length} items. Import them?`);
+           const confirmImport = window.confirm(`Found ${json.features.length} tracks/shapes. Import now?`);
            if(!confirmImport) return;
 
            for (const feature of json.features) {
               let rawCoords = [];
-              
-              // Handle various geometry types (Line, Polygon, MultiPolygon)
               const type = feature.geometry.type;
               
+              // Handle Lines vs Polygons
               if (type === 'Polygon') {
                  rawCoords = feature.geometry.coordinates[0]; 
+              } else if (type === 'LineString') {
+                 rawCoords = feature.geometry.coordinates; // [[lng, lat, alt], ...]
               } else if (type === 'MultiPolygon') {
                  rawCoords = feature.geometry.coordinates[0][0];
-              } else if (type === 'LineString') {
-                 // Convert Track Line to Polygon
-                 rawCoords = feature.geometry.coordinates;
-              } else if (type === 'MultiLineString') {
-                 rawCoords = feature.geometry.coordinates[0];
               }
 
-              // Convert [Lng, Lat] to {lat, lng}
+              // Extract Lat/Lng (ignore Altitude)
               const points = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
 
-              if (points.length > 2) {
+              if (points.length > 1) {
+                 // Force Close Loop if it's a Line/Track
+                 if (type === 'LineString') {
+                    points.push(points[0]);
+                 }
+
                  const acres = calculateAcres(points);
-                 // Try to find a name property, fallback to 'Imported'
                  const props = feature.properties || {};
-                 const name = props.name || props.Name || props.NAME || `SW Import ${new Date().toLocaleTimeString()}`;
-                 const note = `Imported Track. Desc: ${props.description || 'None'}`;
+                 const name = props.Name || props.name || `Imported Track`;
                  
-                 const { data } = await supabase.from('scout_leads').insert([{
+                 const newLead = {
+                    id: Date.now() + Math.random(), // Temporary ID for local view
                     label: name,
-                    note: note,
+                    note: `Imported from SW Maps (${type})`,
                     acres: acres,
                     points: points,
                     center: points[0]
-                 }]).select();
+                 };
                  
-                 if(data) newLeads.push(data[0]);
+                 importedLeads.push(newLead);
+
+                 // Background Sync to Cloud
+                 supabase.from('scout_leads').insert([{
+                    label: newLead.label,
+                    note: newLead.note,
+                    acres: newLead.acres,
+                    points: newLead.points,
+                    center: newLead.center
+                 }]).then(({ error }) => {
+                    if (error) console.error("Cloud Save Failed:", error);
+                 });
               }
-           }
-           
-           if (newLeads.length > 0) {
-              setLeads([...newLeads, ...leads]);
-              alert(`Success! Imported ${newLeads.length} lands.`);
-           } else {
-              alert("Could not extract valid shapes. Ensure you exported 'Tracks' or 'Polygons'.");
            }
         } 
         
-        // CASE B: Standard Backup
-        else if (Array.isArray(json)) {
-           setLeads([...leads, ...json]);
-           alert(`Restored ${json.length} leads from backup.`);
+        if (importedLeads.length > 0) {
+           // Update Map IMMEDIATELY (Local First)
+           setLeads(prev => [...importedLeads, ...prev]);
+           setCenterPos(importedLeads[0].center); // Zoom to first imported item
+           alert(`Success! Loaded ${importedLeads.length} shapes onto the map.`);
+        } else {
+           alert("No valid coordinates found in this file.");
         }
 
       } catch (err) {
         console.error(err);
-        alert("Error reading file. Please check the format.");
+        alert("Error reading file. Ensure it is valid GeoJSON.");
       }
     };
     reader.readAsText(file);
     e.target.value = null; 
   };
 
+  // --- STANDARD FUNCTIONS ---
   const updatePointPosition = (index, newLatLng) => {
     const updatedPoints = [...measurePoints];
     updatedPoints[index] = newLatLng;
@@ -339,6 +347,8 @@ const RealEstateSearchApp = () => {
               <LayersControl.BaseLayer name="Satellite"><TileLayer url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}" attribution='&copy; Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
             </LayersControl>
             {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
+            
+            {/* RENDER LEADS */}
             {filteredLeads.map((lead) => (
               <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }}>
                 <Popup>
@@ -346,6 +356,7 @@ const RealEstateSearchApp = () => {
                 </Popup>
               </Polygon>
             ))}
+
             <DraggableMarker />
             <MapClickHandler />
           </MapContainer>
