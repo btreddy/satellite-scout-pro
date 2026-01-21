@@ -72,7 +72,7 @@ const RealEstateSearchApp = () => {
   
   // --- UI FLAGS ---
   const [showCoordsPanel, setShowCoordsPanel] = useState(false);
-  const [showPointList, setShowPointList] = useState(false); // NEW: Hide list by default
+  const [showPointList, setShowPointList] = useState(false); 
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [centerPos, setCenterPos] = useState({ lat: 17.1350, lng: 78.4300 }); 
   const [showSaveForm, setShowSaveForm] = useState(false);
@@ -116,11 +116,11 @@ const RealEstateSearchApp = () => {
     setCenterPos(lead.center); 
     setIsMeasuring(true);
     setShowCoordsPanel(true);
-    setShowPointList(false); // Keep list collapsed initially
+    setShowPointList(false); 
     setRedoStack([]);
   };
 
-  // --- NEW: EXPORT BACKUP ---
+  // --- EXPORT BACKUP ---
   const handleExportBackup = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(leads));
     const downloadAnchorNode = document.createElement('a');
@@ -131,11 +131,7 @@ const RealEstateSearchApp = () => {
     downloadAnchorNode.remove();
   };
 
-  // --- IMPORT LOGIC ---
-  // ... (imports remain the same) ...
-
-// REPLACE THE handleImport FUNCTION WITH THIS NEW SMART VERSION:
-
+  // --- SMART IMPORT LOGIC ---
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -148,25 +144,17 @@ const RealEstateSearchApp = () => {
 
         // CASE A: SW Maps GeoJSON
         if (json.type === 'FeatureCollection' && json.features) {
-           
-           // --- NEW: CHECK FOR "BAG OF POINTS" ---
-           // Sometimes users save points at corners instead of a full track.
-           // We detect if this file is JUST points, and offer to connect them.
            const allPoints = json.features.every(f => f.geometry.type === 'Point');
            
            if (allPoints && json.features.length > 2) {
-               const confirmConnect = window.confirm(`Found ${json.features.length} separate points (markers). Connect them into one shape?`);
-               
+               const confirmConnect = window.confirm(`Found ${json.features.length} separate points. Connect them into one shape?`);
                if (confirmConnect) {
-                   // Map all points into a single shape array
                    const combinedPoints = json.features.map(f => ({
                        lat: f.geometry.coordinates[1],
                        lng: f.geometry.coordinates[0]
                    }));
-                   
                    const acres = calculateAcres(combinedPoints);
                    const name = json.features[0].properties?.Name || "Connected Points";
-                   
                    const newLead = {
                         id: Date.now(),
                         label: name,
@@ -176,15 +164,11 @@ const RealEstateSearchApp = () => {
                         center: combinedPoints[0]
                    };
                    importedLeads.push(newLead);
-                   
-                   // Save to cloud
                    supabase.from('scout_leads').insert([{
                         label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center
                    }]).then();
                }
-           } 
-           // --- STANDARD IMPORT (Tracks/Polygons) ---
-           else {
+           } else {
                const confirmImport = window.confirm(`Found ${json.features.length} items. Import now?`);
                if(!confirmImport) return;
 
@@ -196,7 +180,6 @@ const RealEstateSearchApp = () => {
                   else if (type === 'LineString') rawCoords = feature.geometry.coordinates;
                   else if (type === 'MultiPolygon') rawCoords = feature.geometry.coordinates[0][0];
 
-                  // If it's just a single point mixed in, we skip it here (unless handled above)
                   if (!rawCoords || rawCoords.length === 0) continue;
 
                   const points = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
@@ -223,27 +206,18 @@ const RealEstateSearchApp = () => {
                }
            }
         } 
-        
-        // CASE B: Standard Backup
+        // CASE B: Backup
         else if (Array.isArray(json)) {
             const confirmBackup = window.confirm(`Found backup with ${json.length} leads. Restore them?`);
-            if (confirmBackup) {
-                importedLeads.push(...json);
-            }
+            if (confirmBackup) importedLeads.push(...json);
         }
         
         if (importedLeads.length > 0) {
            setLeads(prev => [...importedLeads, ...prev]);
            setCenterPos(importedLeads[0].center);
-           alert("Success! Points have been connected into a shape.");
-        } else if (!importedLeads.length && json.features) {
-           alert("No valid shapes created. (Did you decline the 'Connect Points' offer?)");
+           alert("Success! Data imported.");
         }
-
-      } catch (err) { 
-          console.error(err); 
-          alert("Error reading file."); 
-      }
+      } catch (err) { alert("Error reading file."); }
     };
     reader.readAsText(file);
     e.target.value = null; 
@@ -285,7 +259,6 @@ const RealEstateSearchApp = () => {
   const handleSaveShape = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    
     const leadData = {
       label: formData.get('label'),
       survey_no: formData.get('survey_no'),
@@ -427,14 +400,33 @@ const RealEstateSearchApp = () => {
 
           <button onClick={handleExportBackup} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Download Backup"><Download size={20}/></button>
 
-          {/* TOOLS MENU */}
+          {/* TOOLS MENU (UPDATED) */}
           <div className="relative">
-             <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${showToolsMenu ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}><Globe size={16}/> Tools</button>
+             <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${showToolsMenu ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+                <Globe size={16}/> Tools
+             </button>
+             
              {showToolsMenu && (
                 <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 z-[5001] animate-in fade-in zoom-in duration-150">
                    <div className="text-[10px] font-bold text-gray-400 uppercase px-2 mb-1">External Apps</div>
-                   <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"><ExternalLink size={14}/> Open Google Earth</button>
-                   <button onClick={() => { navigator.clipboard.writeText(`${centerPos.lat}, ${centerPos.lng}`); alert('Copied!'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"><Copy size={14}/> Copy Coords</button>
+                   
+                   <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
+                      <ExternalLink size={14}/> Open Google Earth
+                   </button>
+                   
+                   <button onClick={() => { window.open("https://bhuvan-app1.nrsc.gov.in/bhuvan2d/bhuvan/bhuvan2d.php", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
+                      <Globe size={14}/> Open Bhuvan (2D)
+                   </button>
+
+                   <button onClick={() => { window.open("https://bhubharati.telangana.gov.in/knowLandStatus", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
+                      <div className="w-4 flex justify-center text-[10px] font-bold">B</div> Open Bhubharati Status
+                   </button>
+
+                   <div className="h-px bg-gray-100 my-1"></div>
+
+                   <button onClick={() => { navigator.clipboard.writeText(`${centerPos.lat}, ${centerPos.lng}`); alert('Copied!'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
+                      <Copy size={14}/> Copy Coords
+                   </button>
                 </div>
              )}
           </div>
@@ -452,7 +444,6 @@ const RealEstateSearchApp = () => {
               <div className="p-4 space-y-4">
                  <button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded-lg text-xs font-bold border border-blue-200 hover:bg-blue-100 flex items-center justify-center gap-2 mb-2"><Zap size={14}/> Simplify (Cleanup)</button>
                  
-                 {/* COLLAPSIBLE POINT LIST */}
                  <div className="border rounded-lg overflow-hidden">
                     <button onClick={() => setShowPointList(!showPointList)} className="w-full flex justify-between items-center p-2 bg-gray-100 text-xs font-bold text-gray-600 hover:bg-gray-200">
                        <span>{measurePoints.length} Coordinates</span>
