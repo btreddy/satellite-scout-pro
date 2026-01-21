@@ -132,6 +132,10 @@ const RealEstateSearchApp = () => {
   };
 
   // --- IMPORT LOGIC ---
+  // ... (imports remain the same) ...
+
+// REPLACE THE handleImport FUNCTION WITH THIS NEW SMART VERSION:
+
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -144,57 +148,102 @@ const RealEstateSearchApp = () => {
 
         // CASE A: SW Maps GeoJSON
         if (json.type === 'FeatureCollection' && json.features) {
-           const confirmImport = window.confirm(`Found ${json.features.length} tracks. Import now?`);
-           if(!confirmImport) return;
+           
+           // --- NEW: CHECK FOR "BAG OF POINTS" ---
+           // Sometimes users save points at corners instead of a full track.
+           // We detect if this file is JUST points, and offer to connect them.
+           const allPoints = json.features.every(f => f.geometry.type === 'Point');
+           
+           if (allPoints && json.features.length > 2) {
+               const confirmConnect = window.confirm(`Found ${json.features.length} separate points (markers). Connect them into one shape?`);
+               
+               if (confirmConnect) {
+                   // Map all points into a single shape array
+                   const combinedPoints = json.features.map(f => ({
+                       lat: f.geometry.coordinates[1],
+                       lng: f.geometry.coordinates[0]
+                   }));
+                   
+                   const acres = calculateAcres(combinedPoints);
+                   const name = json.features[0].properties?.Name || "Connected Points";
+                   
+                   const newLead = {
+                        id: Date.now(),
+                        label: name,
+                        note: `Created from ${json.features.length} connected points`,
+                        acres: acres,
+                        points: combinedPoints,
+                        center: combinedPoints[0]
+                   };
+                   importedLeads.push(newLead);
+                   
+                   // Save to cloud
+                   supabase.from('scout_leads').insert([{
+                        label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center
+                   }]).then();
+               }
+           } 
+           // --- STANDARD IMPORT (Tracks/Polygons) ---
+           else {
+               const confirmImport = window.confirm(`Found ${json.features.length} items. Import now?`);
+               if(!confirmImport) return;
 
-           for (const feature of json.features) {
-              let rawCoords = [];
-              const type = feature.geometry.type;
-              if (type === 'Polygon') rawCoords = feature.geometry.coordinates[0]; 
-              else if (type === 'LineString') rawCoords = feature.geometry.coordinates;
-              else if (type === 'MultiPolygon') rawCoords = feature.geometry.coordinates[0][0];
+               for (const feature of json.features) {
+                  let rawCoords = [];
+                  const type = feature.geometry.type;
+                  
+                  if (type === 'Polygon') rawCoords = feature.geometry.coordinates[0]; 
+                  else if (type === 'LineString') rawCoords = feature.geometry.coordinates;
+                  else if (type === 'MultiPolygon') rawCoords = feature.geometry.coordinates[0][0];
 
-              const points = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
+                  // If it's just a single point mixed in, we skip it here (unless handled above)
+                  if (!rawCoords || rawCoords.length === 0) continue;
 
-              if (points.length > 1) {
-                 if (type === 'LineString') points.push(points[0]); 
-                 const acres = calculateAcres(points);
-                 const props = feature.properties || {};
-                 const name = props.Name || props.name || `Imported Track`;
-                 
-                 const newLead = {
-                    id: Date.now() + Math.random(),
-                    label: name,
-                    note: `Imported from SW Maps (${type})`,
-                    acres: acres,
-                    points: points,
-                    center: points[0]
-                 };
-                 importedLeads.push(newLead);
-                 supabase.from('scout_leads').insert([{
-                    label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center
-                 }]).then();
-              }
+                  const points = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
+
+                  if (points.length > 1) {
+                     if (type === 'LineString') points.push(points[0]); 
+                     const acres = calculateAcres(points);
+                     const props = feature.properties || {};
+                     const name = props.Name || props.name || `Imported Track`;
+                     
+                     const newLead = {
+                        id: Date.now() + Math.random(),
+                        label: name,
+                        note: `Imported from SW Maps (${type})`,
+                        acres: acres,
+                        points: points,
+                        center: points[0]
+                     };
+                     importedLeads.push(newLead);
+                     supabase.from('scout_leads').insert([{
+                        label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center
+                     }]).then();
+                  }
+               }
            }
         } 
-        // CASE B: Our Own Backup File
+        
+        // CASE B: Standard Backup
         else if (Array.isArray(json)) {
-            // Check if these leads already exist to avoid duplicates? 
-            // For simplicity, we just add them.
             const confirmBackup = window.confirm(`Found backup with ${json.length} leads. Restore them?`);
             if (confirmBackup) {
-                // We add them to local state immediately
                 importedLeads.push(...json);
-                // Also save to Supabase one by one if they don't have an ID (optional, usually backups are just for viewing or re-saving)
-                 alert("Backup Loaded. You can now edit any shape.");
             }
         }
         
         if (importedLeads.length > 0) {
            setLeads(prev => [...importedLeads, ...prev]);
            setCenterPos(importedLeads[0].center);
+           alert("Success! Points have been connected into a shape.");
+        } else if (!importedLeads.length && json.features) {
+           alert("No valid shapes created. (Did you decline the 'Connect Points' offer?)");
         }
-      } catch (err) { alert("Error reading file."); }
+
+      } catch (err) { 
+          console.error(err); 
+          alert("Error reading file."); 
+      }
     };
     reader.readAsText(file);
     e.target.value = null; 
