@@ -4,7 +4,7 @@ import {
   X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, 
   Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, 
   ChevronUp, BookOpen, AlertTriangle, CheckCircle, Radar, FileText, 
-  Lock, Unlock 
+  Lock, Unlock, WifiOff 
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -13,7 +13,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
-const APP_PIN = "1234"; // SECRET ADMIN PIN
+const APP_PIN = "1538"; // SECRET ADMIN PIN
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -54,7 +54,7 @@ const VILLAGE_PRICES = [
 
 // --- UTILITY FUNCTIONS ---
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; // Radius of earth in km
+  const R = 6371; 
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) + 
@@ -103,27 +103,23 @@ const MapController = ({ center }) => {
 // MAIN APP COMPONENT
 // ==========================================
 const RealEstateSearchApp = () => {
-  // --- CORE STATE ---
   const [leads, setLeads] = useState([]); 
   const [filteredLeads, setFilteredLeads] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // --- EDITING & MEASURING STATE ---
   const [measurePoints, setMeasurePoints] = useState([]); 
   const [redoStack, setRedoStack] = useState([]); 
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [editingLead, setEditingLead] = useState(null); 
   const [tempArea, setTempArea] = useState(0);
 
-  // --- FEATURE STATE ---
   const [isRadarMode, setIsRadarMode] = useState(false);
   const [radarResults, setRadarResults] = useState(null);
   
-  // --- AUTH STATE ---
   const [isAdmin, setIsAdmin] = useState(false); 
   const [showLogin, setShowLogin] = useState(false);
+  const [usingOfflineMode, setUsingOfflineMode] = useState(false);
   
-  // --- UI FLAGS ---
   const [showCoordsPanel, setShowCoordsPanel] = useState(false);
   const [showPointList, setShowPointList] = useState(false); 
   const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -131,12 +127,11 @@ const RealEstateSearchApp = () => {
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [centerPos, setCenterPos] = useState({ lat: 17.1350, lng: 78.4300 }); 
 
-  // --- REFS ---
   const dragStartPos = useRef(null);
   const fileInputRef = useRef(null);
   const mapRef = useRef(null); 
 
-  // --- INITIAL LOAD ---
+  // --- INITIAL LOAD (HYBRID) ---
   useEffect(() => { 
     fetchLeads(); 
   }, []);
@@ -155,44 +150,60 @@ const RealEstateSearchApp = () => {
     }
   }, [searchQuery, leads]);
 
+  // --- FETCH DATA (SUPABASE + LOCAL STORAGE) ---
   const fetchLeads = async () => {
-    const { data, error } = await supabase
-      .from('scout_leads')
-      .select('*')
-      .order('created_at', { ascending: false });
+    let allLeads = [];
     
-    if (error) {
-        console.error("Supabase Fetch Error:", error);
-    } else {
-        setLeads(data); 
-        setFilteredLeads(data); 
+    // 1. Try Local Storage first (Always works)
+    try {
+        const local = JSON.parse(localStorage.getItem('scout_leads_backup') || '[]');
+        allLeads = [...local];
+    } catch(e) { console.error("Local load error", e); }
+
+    // 2. Try Supabase (Might fail)
+    try {
+        const { data, error } = await supabase.from('scout_leads').select('*').order('created_at', { ascending: false });
+        if (!error && data) {
+            // Merge unique leads (simple dedupe by ID)
+            const localIds = new Set(allLeads.map(l => l.id));
+            const newServerLeads = data.filter(l => !localIds.has(l.id));
+            allLeads = [...newServerLeads, ...allLeads];
+        } else {
+            console.warn("Supabase load failed, using offline mode.");
+            setUsingOfflineMode(true);
+        }
+    } catch (err) {
+        console.warn("Supabase network error, using offline mode.");
+        setUsingOfflineMode(true);
     }
+
+    // Sort by most recent (assuming higher ID is newer for local, or created_at for server)
+    allLeads.sort((a,b) => (b.id || 0) - (a.id || 0));
+    setLeads(allLeads);
+    setFilteredLeads(allLeads);
   };
 
   const handleLogin = (e) => {
     e.preventDefault();
     const pin = e.target.pin.value;
-    if(pin === APP_PIN) { 
-      setIsAdmin(true); 
-      setShowLogin(false); 
-    } else { 
-      alert("Incorrect PIN"); 
-    }
+    if(pin === APP_PIN) { setIsAdmin(true); setShowLogin(false); } 
+    else { alert("Incorrect PIN"); }
   };
 
-  // --- PDF REPORT GENERATOR ---
+  // --- PDF REPORT (UPDATED) ---
   const handleGeneratePDF = async () => {
-    if(!radarResults && !editingLead) return alert("Please run Growth Radar or select a land first.");
+    // Check if we have data to print (Radar OR Saved Lead OR Active Drawing)
+    const hasActiveDrawing = measurePoints.length > 2;
     
-    // 1. Capture Map
+    if(!radarResults && !editingLead && !hasActiveDrawing) {
+        return alert("Please Measure a land or run Growth Radar first.");
+    }
+    
+    // Capture Map
     const mapElement = document.getElementById('map-print-container');
-    const canvas = await html2canvas(mapElement, { 
-      useCORS: true, 
-      allowTaint: true 
-    });
+    const canvas = await html2canvas(mapElement, { useCORS: true, allowTaint: true });
     const imgData = canvas.toDataURL('image/png');
     
-    // 2. Build PDF
     const doc = new jsPDF();
     
     // Header
@@ -213,15 +224,19 @@ const RealEstateSearchApp = () => {
     doc.setFontSize(10);
     let y = 145;
     
+    // Logic: If editing saved lead, show that. If drawing new, show "Preliminary Survey"
     if(editingLead) {
         doc.text(`Label: ${editingLead.label}`, 10, y); y+=6;
         doc.text(`Survey No: ${editingLead.survey_no || 'N/A'}`, 10, y); y+=6;
         doc.text(`Area: ${formatArea(editingLead.acres)}`, 10, y); y+=10;
+    } else if (hasActiveDrawing) {
+        doc.text(`Label: Preliminary Survey (Unsaved)`, 10, y); y+=6;
+        doc.text(`Area: ${formatArea(tempArea)}`, 10, y); y+=10;
     }
 
     if(radarResults) {
         doc.setFontSize(12);
-        doc.setTextColor(220, 38, 38); // Red
+        doc.setTextColor(220, 38, 38); 
         doc.text("Growth Radar Data:", 10, y); y+=8;
         doc.setTextColor(0,0,0);
         doc.setFontSize(10);
@@ -260,7 +275,7 @@ const RealEstateSearchApp = () => {
     setRedoStack([]);
   };
 
-  // --- FULL IMPORT LOGIC (RESTORED) ---
+  // --- IMPORT LOGIC ---
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -271,80 +286,43 @@ const RealEstateSearchApp = () => {
         const json = JSON.parse(event.target.result);
         const importedLeads = [];
 
-        // CASE A: SW Maps GeoJSON
+        // SW Maps / GeoJSON Handling
         if (json.type === 'FeatureCollection' && json.features) {
            const allPoints = json.features.every(f => f.geometry.type === 'Point');
            
            if (allPoints && json.features.length > 2) {
-               const confirmConnect = window.confirm(`Found ${json.features.length} separate points. Connect them into one shape?`);
-               if (confirmConnect) {
-                   const combinedPoints = json.features.map(f => ({
-                       lat: f.geometry.coordinates[1],
-                       lng: f.geometry.coordinates[0]
-                   }));
-                   const acres = calculateAcres(combinedPoints);
-                   const name = json.features[0].properties?.Name || "Connected Points";
-                   const newLead = {
-                        id: Date.now(),
-                        label: name,
-                        note: `Created from ${json.features.length} connected points`,
-                        acres: acres,
-                        points: combinedPoints,
-                        center: combinedPoints[0]
-                   };
+               if(window.confirm(`Connect ${json.features.length} points?`)) {
+                   const pts = json.features.map(f => ({ lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }));
+                   const newLead = { id: Date.now(), label: "Imported", note: "Connected", acres: calculateAcres(pts), points: pts, center: pts[0] };
                    importedLeads.push(newLead);
-                   supabase.from('scout_leads').insert([{
-                        label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center
-                   }]).then();
+                   saveToLocal(newLead); // Auto-save import to local
                }
            } else {
-               const confirmImport = window.confirm(`Found ${json.features.length} items. Import now?`);
-               if(!confirmImport) return;
-
+               if(!window.confirm(`Import ${json.features.length} items?`)) return;
                for (const feature of json.features) {
-                  let rawCoords = [];
-                  const type = feature.geometry.type;
-                  
-                  if (type === 'Polygon') rawCoords = feature.geometry.coordinates[0]; 
-                  else if (type === 'LineString') rawCoords = feature.geometry.coordinates;
-                  else if (type === 'MultiPolygon') rawCoords = feature.geometry.coordinates[0][0];
-
-                  if (!rawCoords || rawCoords.length === 0) continue;
-
-                  const points = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
-
-                  if (points.length > 1) {
-                     if (type === 'LineString') points.push(points[0]); 
-                     const acres = calculateAcres(points);
-                     const props = feature.properties || {};
-                     const name = props.Name || props.name || `Imported Track`;
-                     
-                     const newLead = {
-                        id: Date.now() + Math.random(),
-                        label: name,
-                        note: `Imported from SW Maps (${type})`,
-                        acres: acres,
-                        points: points,
-                        center: points[0]
-                     };
+                  let raw = null;
+                  if (feature.geometry.type === 'Polygon') raw = feature.geometry.coordinates[0];
+                  else if (feature.geometry.type === 'LineString') raw = feature.geometry.coordinates;
+                  if (!raw) continue;
+                  const pts = raw.map(c => ({ lat: c[1], lng: c[0] }));
+                  if (pts.length > 1) {
+                     const newLead = { id: Date.now() + Math.random(), label: feature.properties?.Name || 'Track', note: 'Import', acres: calculateAcres(pts), points: pts, center: pts[0] };
                      importedLeads.push(newLead);
-                     supabase.from('scout_leads').insert([{
-                        label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center
-                     }]).then();
+                     saveToLocal(newLead);
                   }
                }
            }
         } 
-        // CASE B: Standard Backup Array
         else if (Array.isArray(json)) {
-            const confirmBackup = window.confirm(`Found backup with ${json.length} leads. Restore them?`);
-            if (confirmBackup) importedLeads.push(...json);
+            if(window.confirm("Restore backup?")) {
+                json.forEach(l => saveToLocal(l));
+                importedLeads.push(...json);
+            }
         }
         
         if (importedLeads.length > 0) {
            setLeads(prev => [...importedLeads, ...prev]);
-           setCenterPos(importedLeads[0].center);
-           alert("Success! Data imported.");
+           alert("Imported successfully (Saved Locally).");
         }
       } catch (err) { alert("Error reading file."); }
     };
@@ -362,7 +340,6 @@ const RealEstateSearchApp = () => {
     downloadAnchorNode.remove();
   };
 
-  // --- VERTEX EDITING LOGIC ---
   const updatePointPosition = (index, newLatLng) => {
     const updatedPoints = [...measurePoints];
     updatedPoints[index] = newLatLng;
@@ -396,7 +373,18 @@ const RealEstateSearchApp = () => {
     setTempArea(calculateAcres(newPoints));
   };
 
-  // --- SAVE LOGIC ---
+  // --- HYBRID SAVE LOGIC (FAIL-SAFE) ---
+  const saveToLocal = (leadItem) => {
+    try {
+        const current = JSON.parse(localStorage.getItem('scout_leads_backup') || '[]');
+        // Remove if exists (update) then add new
+        const filtered = current.filter(l => l.id !== leadItem.id);
+        filtered.push(leadItem);
+        localStorage.setItem('scout_leads_backup', JSON.stringify(filtered));
+        return true;
+    } catch(e) { return false; }
+  };
+
   const handleSaveShape = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -408,73 +396,79 @@ const RealEstateSearchApp = () => {
       points: measurePoints, 
       center: measurePoints[0] 
     };
+
+    // Prepare ID (Use existing or new timestamp)
+    const finalId = editingLead ? editingLead.id : Date.now();
+    const finalLead = { ...leadData, id: finalId };
     
+    let savedToCloud = false;
+
+    // 1. Try Saving to Supabase
     try {
-        let result;
         if (editingLead) {
-          result = await supabase.from('scout_leads').update(leadData).eq('id', editingLead.id);
-          if (result.error) throw result.error;
-          setLeads(leads.map(l => l.id === editingLead.id ? { ...l, ...leadData } : l));
+          const { error } = await supabase.from('scout_leads').update(leadData).eq('id', finalId);
+          if (!error) savedToCloud = true;
         } else {
-          result = await supabase.from('scout_leads').insert([leadData]).select();
-          if (result.error) throw result.error;
-          setLeads([result.data[0], ...leads]);
+          const { error } = await supabase.from('scout_leads').insert([finalLead]);
+          if (!error) savedToCloud = true;
         }
-        
-        finishSave();
-        alert("Saved successfully!");
-        
     } catch (err) {
-        console.error("Save Error:", err);
-        alert("Error saving: " + err.message);
+        console.warn("Cloud save failed, switching to local.");
     }
+
+    // 2. Always Save to Local Storage (Backup)
+    saveToLocal(finalLead);
+
+    // 3. Update State
+    if(editingLead) {
+        setLeads(leads.map(l => l.id === finalId ? finalLead : l));
+    } else {
+        setLeads([finalLead, ...leads]);
+    }
+
+    finishSave();
+    
+    if(savedToCloud) alert("Saved to Cloud & Local Backup!");
+    else alert("Saved Locally (Offline Mode).");
   };
 
   const finishSave = () => { 
-    setMeasurePoints([]); 
-    setRedoStack([]); 
-    setIsMeasuring(false); 
-    setEditingLead(null); 
-    setShowSaveForm(false); 
-    setShowCoordsPanel(false); 
+    setMeasurePoints([]); setRedoStack([]); setIsMeasuring(false); 
+    setEditingLead(null); setShowSaveForm(false); setShowCoordsPanel(false); 
   };
   
   const handleDelete = async (id) => { 
     if (window.confirm("Delete this lead?")) { 
-        const { error } = await supabase.from('scout_leads').delete().eq('id', id);
-        if(error) alert("Error deleting: " + error.message);
-        else setLeads(leads.filter(l => l.id !== id)); 
+        // Try cloud delete
+        try { await supabase.from('scout_leads').delete().eq('id', id); } catch(e){}
+        
+        // Local delete
+        const current = JSON.parse(localStorage.getItem('scout_leads_backup') || '[]');
+        const filtered = current.filter(l => l.id !== id);
+        localStorage.setItem('scout_leads_backup', JSON.stringify(filtered));
+
+        setLeads(leads.filter(l => l.id !== id)); 
     } 
   };
 
-  // --- MAP CLICK HANDLER ---
+  // --- MAP CLICK ---
   const MapClickHandler = () => {
     useMapEvents({
       click(e) {
         if (isMeasuring && isAdmin) {
-          // Add Point
           const newPoints = [...measurePoints, e.latlng];
-          setMeasurePoints(newPoints); 
-          setRedoStack([]); 
+          setMeasurePoints(newPoints); setRedoStack([]); 
           setTempArea(calculateAcres(newPoints)); 
-          setShowCoordsPanel(true); 
-          setShowPointList(false);
-          
+          setShowCoordsPanel(true); setShowPointList(false);
         } else if (isRadarMode && isAdmin) {
-          // Radar Scan
           const { lat, lng } = e.latlng;
           const distances = GROWTH_NODES.map(node => ({ 
-             ...node, 
-             dist: calculateDistance(lat, lng, node.lat, node.lng) 
+             ...node, dist: calculateDistance(lat, lng, node.lat, node.lng) 
           })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist));
-          
           const nearestVillage = VILLAGE_PRICES.map(v => ({ 
-             ...v, 
-             dist: calculateDistance(lat, lng, v.lat, v.lng) 
+             ...v, dist: calculateDistance(lat, lng, v.lat, v.lng) 
           })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist))[0];
-          
           setRadarResults({ pos: e.latlng, nodes: distances.slice(0, 3), village: nearestVillage });
-          
         } else { 
           setShowToolsMenu(false); 
         }
@@ -503,10 +497,7 @@ const RealEstateSearchApp = () => {
 
   const DraggableVertex = ({ position, index }) => {
     const markerRef = useRef(null);
-    const eventHandlers = useMemo(() => ({ 
-        drag(e) { updatePointPosition(index, e.latlng); }, 
-        dragend(e) { updatePointPosition(index, e.target.getLatLng()); }, 
-    }), [index]);
+    const eventHandlers = useMemo(() => ({ drag(e) { updatePointPosition(index, e.latlng); }, dragend(e) { updatePointPosition(index, e.target.getLatLng()); }, }), [index]);
     return <Marker draggable={true} eventHandlers={eventHandlers} position={position} icon={EditIcon} ref={markerRef}><Popup>Pt {index + 1}</Popup></Marker>;
   };
 
@@ -521,6 +512,7 @@ const RealEstateSearchApp = () => {
         <div>
            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
              <Crosshair className="text-red-600"/> Satellite Scout Pro
+             {usingOfflineMode && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded flex items-center gap-1"><WifiOff size={10}/> Offline</span>}
            </h1>
         </div>
 
@@ -548,120 +540,56 @@ const RealEstateSearchApp = () => {
           {/* ADMIN TOOLS */}
           {isAdmin ? (
              <>
-                {/* 1. Radar Button */}
-                <button onClick={() => { setIsRadarMode(!isRadarMode); setIsMeasuring(false); setRadarResults(null); }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${isRadarMode ? 'bg-purple-100 text-purple-700 border-purple-200 animate-pulse' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
-                   <Radar size={16}/> Radar
-                </button>
-                
-                {/* 2. PDF Button */}
-                <button onClick={handleGeneratePDF} className="p-2 text-red-600 hover:bg-red-50 rounded-lg border border-red-100 bg-white" title="Download PDF Report">
-                   <FileText size={20}/>
-                </button>
-                
+                <button onClick={() => { setIsRadarMode(!isRadarMode); setIsMeasuring(false); setRadarResults(null); }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${isRadarMode ? 'bg-purple-100 text-purple-700 border-purple-200 animate-pulse' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}><Radar size={16}/> Radar</button>
+                <button onClick={handleGeneratePDF} className="p-2 text-red-600 hover:bg-red-50 rounded-lg border border-red-100 bg-white" title="Download PDF Report"><FileText size={20}/></button>
                 <div className="h-6 w-px bg-gray-300 mx-1"></div>
-                
-                {/* 3. Measure Button */}
-                <button onClick={() => { setIsMeasuring(!isMeasuring); if(!isMeasuring) { setMeasurePoints([]); setRedoStack([]); setEditingLead(null); setIsRadarMode(false); } }} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold border transition-colors ${isMeasuring ? 'bg-orange-500 text-white border-orange-600' : 'text-gray-600 hover:bg-gray-200'}`}>
-                   <Ruler size={16}/> {isMeasuring ? 'Stop' : 'Measure'}
-                </button>
-                
-                {/* 4. Import Button */}
-                <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Import JSON/KML">
-                   <Upload size={20}/>
-                </button>
+                <button onClick={() => { setIsMeasuring(!isMeasuring); if(!isMeasuring) { setMeasurePoints([]); setRedoStack([]); setEditingLead(null); setIsRadarMode(false); } }} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold border transition-colors ${isMeasuring ? 'bg-orange-500 text-white border-orange-600' : 'text-gray-600 hover:bg-gray-200'}`}><Ruler size={16}/> {isMeasuring ? 'Stop' : 'Measure'}</button>
+                <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"><Upload size={20}/></button>
                 <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json,.geojson,.kml" />
-
-                {/* 5. Export Button (RESTORED) */}
-                <button onClick={handleExportBackup} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Export Backup">
-                   <Download size={20}/>
-                </button>
-                
-                {/* 6. Unlock Button */}
-                <button onClick={() => setIsAdmin(false)} className="p-2 text-gray-400 hover:text-red-500">
-                   <Unlock size={20}/>
-                </button>
+                <button onClick={handleExportBackup} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Export Backup"><Download size={20}/></button>
+                <button onClick={() => setIsAdmin(false)} className="p-2 text-gray-400 hover:text-red-500"><Unlock size={20}/></button>
              </>
           ) : (
-             <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-900">
-                <Lock size={14}/> Admin Login
-             </button>
+             <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-900"><Lock size={14}/> Admin Login</button>
           )}
 
-          <button onClick={() => setShowResources(true)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-100 bg-white">
-             <BookOpen size={20}/>
-          </button>
+          <button onClick={() => setShowResources(true)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-100 bg-white"><BookOpen size={20}/></button>
           
-          {/* TOOLS MENU (FULL VERSION) */}
           <div className="relative">
-             <button onClick={() => setShowToolsMenu(!showToolsMenu)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border bg-white text-gray-700 border-gray-300 hover:bg-gray-50">
-                <Globe size={16}/> Tools
-             </button>
+             <button onClick={() => setShowToolsMenu(!showToolsMenu)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border bg-white text-gray-700 border-gray-300 hover:bg-gray-50"><Globe size={16}/> Tools</button>
              {showToolsMenu && (
                 <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 z-[5001]">
-                   <div className="text-[10px] font-bold text-gray-400 uppercase px-2 mb-1">External Apps</div>
-                   
-                   <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2">
-                       <ExternalLink size={14}/> Open Google Earth
-                   </button>
-                   
-                   <button onClick={() => { window.open("https://bhuvan-app1.nrsc.gov.in/bhuvan2d/bhuvan/bhuvan2d.php", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2">
-                       <Globe size={14}/> Open Bhuvan (2D)
-                   </button>
-                   
-                   <button onClick={() => { window.open("https://bhubharati.telangana.gov.in/knowLandStatus", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2">
-                       <div className="w-4 flex justify-center text-[10px] font-bold">B</div> Open Bhubharati
-                   </button>
-
+                   <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><ExternalLink size={14}/> Open Google Earth</button>
+                   <button onClick={() => { window.open("https://bhuvan-app1.nrsc.gov.in/bhuvan2d/bhuvan/bhuvan2d.php", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><Globe size={14}/> Open Bhuvan (2D)</button>
+                   <button onClick={() => { window.open("https://bhubharati.telangana.gov.in/knowLandStatus", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><div className="w-4 flex justify-center text-[10px] font-bold">B</div> Open Bhubharati</button>
                    <div className="h-px bg-gray-100 my-1"></div>
-
-                   <button onClick={() => { navigator.clipboard.writeText(`${centerPos.lat}, ${centerPos.lng}`); alert('Copied!'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2">
-                       <Copy size={14}/> Copy Coords
-                   </button>
+                   <button onClick={() => { navigator.clipboard.writeText(`${centerPos.lat}, ${centerPos.lng}`); alert('Copied!'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><Copy size={14}/> Copy Coords</button>
                 </div>
              )}
           </div>
         </div>
       </div>
 
-      {/* LOGIN MODAL */}
+      {/* LOGIN & RESOURCES MODALS */}
       {showLogin && (
         <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm">
            <div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs">
               <h2 className="text-xl font-bold mb-4 text-center">Enter Access PIN</h2>
               <form onSubmit={handleLogin} className="space-y-3">
                  <input type="password" name="pin" className="w-full border p-2 rounded text-center text-2xl tracking-widest" autoFocus placeholder="****" />
-                 <div className="flex gap-2">
-                    <button type="button" onClick={() => setShowLogin(false)} className="flex-1 py-2 bg-gray-100 rounded">Cancel</button>
-                    <button type="submit" className="flex-1 bg-black text-white py-2 rounded font-bold">Unlock</button>
-                 </div>
+                 <div className="flex gap-2"><button type="button" onClick={() => setShowLogin(false)} className="flex-1 py-2 bg-gray-100 rounded">Cancel</button><button type="submit" className="flex-1 bg-black text-white py-2 rounded font-bold">Unlock</button></div>
               </form>
            </div>
         </div>
       )}
 
-      {/* RESOURCES MODAL */}
       {showResources && (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6">
              <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div>
              <div className="space-y-6">
-                <div>
-                   <h3 className="font-bold mb-2">Government Portals</h3>
-                   <div className="grid grid-cols-2 gap-2 text-sm">
-                      <a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a>
-                      <a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a>
-                   </div>
-                </div>
-                <div>
-                   <h3 className="font-bold mb-2">Due Diligence Checklist</h3>
-                   <ul className="list-disc pl-5 text-sm space-y-1">
-                      <li>Check Link Docs (30 Yrs Flow)</li>
-                      <li>Check Encumbrance Certificate (Online & Manual)</li>
-                      <li>Check Prohibited List (Sec 22A)</li>
-                      <li>Verify Land Use Zone (HMDA/DTCP)</li>
-                      <li>Verify FTL / Nala Buffer Zones</li>
-                   </ul>
-                </div>
+                <div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div>
+                <div><h3 className="font-bold mb-2">Checklist</h3><ul className="list-disc pl-5 text-sm space-y-1"><li>Check Link Docs (30 Yrs)</li><li>Check Encumbrance Certificate (Online & Manual)</li><li>Check Prohibited List (Sec 22A)</li><li>Verify FTL / Nala Buffer Zones</li></ul></div>
              </div>
           </div>
         </div>
@@ -669,99 +597,37 @@ const RealEstateSearchApp = () => {
 
       {/* MAP WRAPPER */}
       <div className="flex flex-1 relative h-[85vh]">
-        {/* EDITING PANEL */}
         {showCoordsPanel && isMeasuring && (
            <div className="w-80 bg-white shadow-xl z-10 overflow-y-auto border-r border-gray-200 flex flex-col">
-              <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-                 <h3 className="font-bold text-sm">Measure Mode</h3>
-                 <button onClick={() => setShowCoordsPanel(false)}><X size={16}/></button>
-              </div>
-              <div className="p-4">
-                 <button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded text-xs font-bold mb-2">Simplify Shape</button>
-                 <div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div>
-              </div>
-              
-              <div className="border rounded-lg overflow-hidden m-4">
-                 <button onClick={() => setShowPointList(!showPointList)} className="w-full flex justify-between items-center p-2 bg-gray-100 text-xs font-bold text-gray-600 hover:bg-gray-200">
-                    <span>{measurePoints.length} Coordinates</span>
-                    {showPointList ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-                 </button>
-                 
-                 {showPointList && (
-                    <div className="max-h-60 overflow-y-auto p-2 bg-gray-50">
-                      {measurePoints.map((pt, i) => (
-                        <div key={i} className="mb-2 last:mb-0 bg-white p-2 rounded border border-gray-200 text-xs">
-                          <div className="flex justify-between mb-1 font-bold text-gray-500">Pt {i + 1}</div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <input type="number" step="0.00001" className="w-full border rounded p-1" value={pt.lat} onChange={(e) => handleCoordInput(i, 'lat', e.target.value)} />
-                            <input type="number" step="0.00001" className="w-full border rounded p-1" value={pt.lng} onChange={(e) => handleCoordInput(i, 'lng', e.target.value)} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                 )}
-              </div>
-
-              <div className="p-4 border-t mt-auto">
-                 <button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Shape</button>
-              </div>
+              <div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-sm">Measure Mode</h3><button onClick={() => setShowCoordsPanel(false)}><X size={16}/></button></div>
+              <div className="p-4"><button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded text-xs font-bold mb-2">Simplify Shape</button><div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div></div>
+              <div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Shape</button></div>
            </div>
         )}
 
-        {/* MAP CONTAINER */}
         <div id="map-print-container" className="flex-1 relative bg-gray-200">
           <MapContainer center={centerPos} zoom={13} maxZoom={22} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }} ref={mapRef} preferCanvas={true}>
             <MapController center={centerPos} />
             <LayersControl position="topright">
-              <LayersControl.BaseLayer checked name="Google Hybrid">
-                  <TileLayer url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" attribution='&copy; Google' maxNativeZoom={20} maxZoom={22} />
-              </LayersControl.BaseLayer>
-              <LayersControl.BaseLayer name="Google Streets">
-                  <TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" attribution='&copy; Google' maxNativeZoom={20} maxZoom={22} />
-              </LayersControl.BaseLayer>
-              <LayersControl.BaseLayer name="Satellite Only">
-                  <TileLayer url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}" attribution='&copy; Google' maxNativeZoom={20} maxZoom={22} />
-              </LayersControl.BaseLayer>
+              <LayersControl.BaseLayer checked name="Google Hybrid"><TileLayer url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" attribution='&copy; Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
+              <LayersControl.BaseLayer name="Google Streets"><TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" attribution='&copy; Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
             </LayersControl>
             
-            {/* SAVED LEADS */}
             {filteredLeads.map((lead) => {
                if(editingLead && editingLead.id === lead.id) return null;
-               return (
-                 <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }} eventHandlers={{ click: () => { if(isAdmin) handleEditShape(lead); } }}>
-                    <Popup>
-                       <div className="text-center font-bold">{lead.label}</div>
-                       <div className="text-center text-xs">{formatArea(lead.acres)}</div>
-                    </Popup>
-                 </Polygon>
-               );
+               return <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }} eventHandlers={{ click: () => { if(isAdmin) handleEditShape(lead); } }}><Popup>{lead.label} ({formatArea(lead.acres)})</Popup></Polygon>;
             })}
             
-            {/* CURRENT EDIT SHAPE */}
-            {measurePoints.length > 0 && (
-               <>
-                  <Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />
-                  {measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}
-               </>
-            )}
+            {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
             
-            {/* RADAR POPUP */}
             {radarResults && (
                <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
                   <div className="min-w-[200px]">
                      <div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-center flex items-center justify-center gap-2"><Radar size={14}/> Growth Radar</div>
                      <div className="space-y-2 pt-2">
-                        {radarResults.nodes.map((node, i) => (
-                           <div key={i} className="flex justify-between text-xs border-b pb-1">
-                              <span className="font-bold text-gray-700">{node.name}</span>
-                              <span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span>
-                           </div>
-                        ))}
+                        {radarResults.nodes.map((node, i) => (<div key={i} className="flex justify-between text-xs border-b pb-1"><span className="font-bold text-gray-700">{node.name}</span><span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span></div>))}
                      </div>
-                     <div className="mt-3 pt-2 bg-yellow-50 p-2 rounded border border-yellow-200">
-                        <div className="text-[10px] text-gray-500 uppercase font-bold">Price Est ({radarResults.village.name})</div>
-                        <div className="text-lg font-bold text-gray-800">{radarResults.village.price} <span className="text-xs font-normal text-gray-500">/ sq yd</span></div>
-                     </div>
+                     <div className="mt-3 pt-2 bg-yellow-50 p-2 rounded border border-yellow-200"><div className="text-[10px] text-gray-500 uppercase font-bold">Price Est ({radarResults.village.name})</div><div className="text-lg font-bold text-gray-800">{radarResults.village.price} <span className="text-xs font-normal text-gray-500">/ sq yd</span></div></div>
                   </div>
                </Popup>
             )}
@@ -772,7 +638,6 @@ const RealEstateSearchApp = () => {
         </div>
       </div>
 
-      {/* SAVE MODAL */}
       {showSaveForm && (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[2000] flex justify-center items-center p-4">
           <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl">
@@ -781,11 +646,7 @@ const RealEstateSearchApp = () => {
               <input name="label" required className="w-full border p-2 rounded" placeholder="Name" />
               <input name="survey_no" className="w-full border p-2 rounded" placeholder="Survey No" />
               <textarea name="note" className="w-full border p-2 rounded" placeholder="Notes..." />
-              
-              <div className="flex gap-2">
-                 <button type="button" onClick={() => setShowSaveForm(false)} className="flex-1 bg-gray-100 py-2 rounded">Cancel</button>
-                 <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold">Save</button>
-              </div>
+              <div className="flex gap-2"><button type="button" onClick={() => setShowSaveForm(false)} className="flex-1 bg-gray-100 py-2 rounded">Cancel</button><button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold">Save</button></div>
             </form>
           </div>
         </div>
