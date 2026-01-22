@@ -4,7 +4,7 @@ import {
   X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, 
   Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, 
   ChevronUp, BookOpen, AlertTriangle, CheckCircle, Radar, FileText, 
-  Lock, Unlock, WifiOff 
+  Lock, Unlock, WifiOff, ArrowRight, MapPin 
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -13,7 +13,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
-const APP_PIN = "1538"; // SECRET ADMIN PIN
+const APP_PIN = "9959879260"; 
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -43,7 +43,6 @@ const GROWTH_NODES = [
   { name: "TCS Adibatla", lat: 17.2100, lng: 78.5300, type: "IT Hub" }
 ];
 
-// --- DATABASE: VILLAGE PRICES ---
 const VILLAGE_PRICES = [
   { name: "Shadnagar", price: "₹12k - ₹18k", lat: 17.0700, lng: 78.2000 },
   { name: "Maheshwaram", price: "₹18k - ₹25k", lat: 17.1300, lng: 78.4300 },
@@ -52,7 +51,7 @@ const VILLAGE_PRICES = [
   { name: "Amangal", price: "₹6k - ₹9k", lat: 16.8500, lng: 78.5200 }
 ];
 
-// --- UTILITY FUNCTIONS ---
+// --- UTILS ---
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371; 
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -126,17 +125,15 @@ const RealEstateSearchApp = () => {
   const [showResources, setShowResources] = useState(false); 
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [centerPos, setCenterPos] = useState({ lat: 17.1350, lng: 78.4300 }); 
+  const [tempSearchMarker, setTempSearchMarker] = useState(null); // New state for search pin
 
   const dragStartPos = useRef(null);
   const fileInputRef = useRef(null);
   const mapRef = useRef(null); 
 
-  // --- INITIAL LOAD (HYBRID) ---
-  useEffect(() => { 
-    fetchLeads(); 
-  }, []);
+  useEffect(() => { fetchLeads(); }, []);
 
-  // --- SEARCH FILTER ---
+  // --- UNIVERSAL SEARCH LOGIC ---
   useEffect(() => {
     if (!searchQuery) { 
       setFilteredLeads(leads); 
@@ -150,37 +147,45 @@ const RealEstateSearchApp = () => {
     }
   }, [searchQuery, leads]);
 
-  // --- FETCH DATA (SUPABASE + LOCAL STORAGE) ---
+  // NEW: Handle External Links / Coords
+  const handleExternalSearch = () => {
+    // 1. Regex for "lat,lng" (e.g. 17.123, 78.123)
+    const coordRegex = /(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/;
+    const match = searchQuery.match(coordRegex);
+
+    if (match) {
+        const lat = parseFloat(match[1]);
+        const lng = parseFloat(match[2]);
+        setCenterPos({ lat, lng });
+        setTempSearchMarker({ lat, lng });
+        setSearchQuery(''); // Clear bar
+        alert(`Flying to ${lat}, ${lng}`);
+    } else if (searchQuery.includes("goo.gl") || searchQuery.includes("maps.app")) {
+        // Short Link Trap
+        alert("⚠️ Short Link Detected!\n\nDue to browser security, I cannot un-shorten this link directly.\n\n1. Click the link to open it.\n2. Copy the LONG URL from the address bar.\n3. Paste that here.");
+    } else {
+        alert("No coordinates found in text. Please paste 'Lat,Lng' or a full Google Maps link.");
+    }
+  };
+
   const fetchLeads = async () => {
     let allLeads = [];
-    
-    // 1. Try Local Storage first (Always works)
     try {
         const local = JSON.parse(localStorage.getItem('scout_leads_backup') || '[]');
         allLeads = [...local];
     } catch(e) { console.error("Local load error", e); }
 
-    // 2. Try Supabase (Might fail)
     try {
         const { data, error } = await supabase.from('scout_leads').select('*').order('created_at', { ascending: false });
         if (!error && data) {
-            // Merge unique leads (simple dedupe by ID)
             const localIds = new Set(allLeads.map(l => l.id));
             const newServerLeads = data.filter(l => !localIds.has(l.id));
             allLeads = [...newServerLeads, ...allLeads];
-        } else {
-            console.warn("Supabase load failed, using offline mode.");
-            setUsingOfflineMode(true);
-        }
-    } catch (err) {
-        console.warn("Supabase network error, using offline mode.");
-        setUsingOfflineMode(true);
-    }
+        } else { setUsingOfflineMode(true); }
+    } catch (err) { setUsingOfflineMode(true); }
 
-    // Sort by most recent (assuming higher ID is newer for local, or created_at for server)
     allLeads.sort((a,b) => (b.id || 0) - (a.id || 0));
-    setLeads(allLeads);
-    setFilteredLeads(allLeads);
+    setLeads(allLeads); setFilteredLeads(allLeads);
   };
 
   const handleLogin = (e) => {
@@ -190,41 +195,29 @@ const RealEstateSearchApp = () => {
     else { alert("Incorrect PIN"); }
   };
 
-  // --- PDF REPORT (UPDATED) ---
+  // --- PDF REPORT ---
   const handleGeneratePDF = async () => {
-    // Check if we have data to print (Radar OR Saved Lead OR Active Drawing)
     const hasActiveDrawing = measurePoints.length > 2;
+    if(!radarResults && !editingLead && !hasActiveDrawing) return alert("Please Measure a land or run Growth Radar first.");
     
-    if(!radarResults && !editingLead && !hasActiveDrawing) {
-        return alert("Please Measure a land or run Growth Radar first.");
-    }
-    
-    // Capture Map
     const mapElement = document.getElementById('map-print-container');
     const canvas = await html2canvas(mapElement, { useCORS: true, allowTaint: true });
     const imgData = canvas.toDataURL('image/png');
-    
     const doc = new jsPDF();
     
-    // Header
-    doc.setFillColor(79, 70, 229); // Purple
+    doc.setFillColor(79, 70, 229); 
     doc.rect(0, 0, 210, 20, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16);
     doc.text("Satellite Scout - Investment Insight", 10, 13);
     
-    // Map Image
     doc.addImage(imgData, 'PNG', 10, 25, 190, 100);
-    
-    // Data Section
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(14);
     doc.text("Property Analysis", 10, 135);
-    
     doc.setFontSize(10);
     let y = 145;
     
-    // Logic: If editing saved lead, show that. If drawing new, show "Preliminary Survey"
     if(editingLead) {
         doc.text(`Label: ${editingLead.label}`, 10, y); y+=6;
         doc.text(`Survey No: ${editingLead.survey_no || 'N/A'}`, 10, y); y+=6;
@@ -240,10 +233,7 @@ const RealEstateSearchApp = () => {
         doc.text("Growth Radar Data:", 10, y); y+=8;
         doc.setTextColor(0,0,0);
         doc.setFontSize(10);
-        
-        radarResults.nodes.forEach(node => {
-            doc.text(`${node.name}: ${node.dist} km`, 10, y); y+=6;
-        });
+        radarResults.nodes.forEach(node => { doc.text(`${node.name}: ${node.dist} km`, 10, y); y+=6; });
         y+=4;
         doc.setFontSize(11);
         doc.text(`Estimated Village Price: ${radarResults.village.price} / sq yd`, 10, y);
@@ -252,50 +242,34 @@ const RealEstateSearchApp = () => {
     doc.setFontSize(8);
     doc.setTextColor(100,100,100);
     doc.text("Disclaimer: Report generated by Satellite Scout Pro. Verify all data physically.", 10, 280);
-    
     doc.save("Scout_Investment_Report.pdf");
   };
 
   const handleSimplify = () => {
     const simplified = measurePoints.filter((_, i) => i === 0 || i % 4 === 0 || i === measurePoints.length - 1);
-    setRedoStack([...redoStack, measurePoints]); 
-    setMeasurePoints(simplified); 
-    setTempArea(calculateAcres(simplified));
+    setRedoStack([...redoStack, measurePoints]); setMeasurePoints(simplified); setTempArea(calculateAcres(simplified));
   };
 
   const handleEditShape = (lead) => {
     if(!isAdmin) return;
-    setMeasurePoints(lead.points); 
-    setTempArea(lead.acres); 
-    setEditingLead(lead); 
-    setCenterPos(lead.center); 
-    setIsMeasuring(true); 
-    setShowCoordsPanel(true); 
-    setShowPointList(false); 
-    setRedoStack([]);
+    setMeasurePoints(lead.points); setTempArea(lead.acres); setEditingLead(lead); setCenterPos(lead.center); setIsMeasuring(true); setShowCoordsPanel(true); setShowPointList(false); setRedoStack([]);
   };
 
   // --- IMPORT LOGIC ---
   const handleImport = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
+    const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
         const json = JSON.parse(event.target.result);
         const importedLeads = [];
-
-        // SW Maps / GeoJSON Handling
         if (json.type === 'FeatureCollection' && json.features) {
            const allPoints = json.features.every(f => f.geometry.type === 'Point');
-           
            if (allPoints && json.features.length > 2) {
                if(window.confirm(`Connect ${json.features.length} points?`)) {
                    const pts = json.features.map(f => ({ lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }));
                    const newLead = { id: Date.now(), label: "Imported", note: "Connected", acres: calculateAcres(pts), points: pts, center: pts[0] };
-                   importedLeads.push(newLead);
-                   saveToLocal(newLead); // Auto-save import to local
+                   importedLeads.push(newLead); saveToLocal(newLead);
                }
            } else {
                if(!window.confirm(`Import ${json.features.length} items?`)) return;
@@ -307,103 +281,40 @@ const RealEstateSearchApp = () => {
                   const pts = raw.map(c => ({ lat: c[1], lng: c[0] }));
                   if (pts.length > 1) {
                      const newLead = { id: Date.now() + Math.random(), label: feature.properties?.Name || 'Track', note: 'Import', acres: calculateAcres(pts), points: pts, center: pts[0] };
-                     importedLeads.push(newLead);
-                     saveToLocal(newLead);
+                     importedLeads.push(newLead); saveToLocal(newLead);
                   }
                }
            }
-        } 
-        else if (Array.isArray(json)) {
-            if(window.confirm("Restore backup?")) {
-                json.forEach(l => saveToLocal(l));
-                importedLeads.push(...json);
-            }
+        } else if (Array.isArray(json)) {
+            if(window.confirm("Restore backup?")) { json.forEach(l => saveToLocal(l)); importedLeads.push(...json); }
         }
-        
-        if (importedLeads.length > 0) {
-           setLeads(prev => [...importedLeads, ...prev]);
-           alert("Imported successfully (Saved Locally).");
-        }
+        if (importedLeads.length > 0) { setLeads(prev => [...importedLeads, ...prev]); alert("Imported successfully (Saved Locally)."); }
       } catch (err) { alert("Error reading file."); }
     };
-    reader.readAsText(file);
-    e.target.value = null; 
+    reader.readAsText(file); e.target.value = null; 
   };
 
   const handleExportBackup = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(leads));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `SatelliteScout_Backup_${new Date().toISOString().slice(0,10)}.json`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
+    const a = document.createElement('a'); a.href = dataStr; a.download = `SatelliteScout_Backup_${new Date().toISOString().slice(0,10)}.json`; a.click();
   };
 
-  const updatePointPosition = (index, newLatLng) => {
-    const updatedPoints = [...measurePoints];
-    updatedPoints[index] = newLatLng;
-    setMeasurePoints(updatedPoints);
-    setTempArea(calculateAcres(updatedPoints));
-  };
-
-  const handleCoordInput = (index, field, value) => {
-    const updatedPoints = [...measurePoints];
-    updatedPoints[index] = { ...updatedPoints[index], [field]: parseFloat(value) };
-    setMeasurePoints(updatedPoints);
-    setTempArea(calculateAcres(updatedPoints));
-  };
-
-  const handleUndo = () => {
-    if (measurePoints.length === 0) return;
-    const lastPoint = measurePoints[measurePoints.length - 1];
-    const newPoints = measurePoints.slice(0, -1);
-    setMeasurePoints(newPoints);
-    setRedoStack([lastPoint, ...redoStack]);
-    setTempArea(calculateAcres(newPoints));
-  };
-
-  const handleRedo = () => {
-    if (redoStack.length === 0) return;
-    const pointToRestore = redoStack[0];
-    const newRedoStack = redoStack.slice(1);
-    const newPoints = [...measurePoints, pointToRestore];
-    setMeasurePoints(newPoints);
-    setRedoStack(newRedoStack);
-    setTempArea(calculateAcres(newPoints));
-  };
-
-  // --- HYBRID SAVE LOGIC (FAIL-SAFE) ---
+  // --- SAVE LOGIC (HYBRID) ---
   const saveToLocal = (leadItem) => {
     try {
         const current = JSON.parse(localStorage.getItem('scout_leads_backup') || '[]');
-        // Remove if exists (update) then add new
-        const filtered = current.filter(l => l.id !== leadItem.id);
-        filtered.push(leadItem);
-        localStorage.setItem('scout_leads_backup', JSON.stringify(filtered));
-        return true;
+        const filtered = current.filter(l => l.id !== leadItem.id); filtered.push(leadItem);
+        localStorage.setItem('scout_leads_backup', JSON.stringify(filtered)); return true;
     } catch(e) { return false; }
   };
 
   const handleSaveShape = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const leadData = { 
-      label: formData.get('label'), 
-      survey_no: formData.get('survey_no'), 
-      note: formData.get('note'), 
-      acres: tempArea, 
-      points: measurePoints, 
-      center: measurePoints[0] 
-    };
-
-    // Prepare ID (Use existing or new timestamp)
+    const leadData = { label: formData.get('label'), survey_no: formData.get('survey_no'), note: formData.get('note'), acres: tempArea, points: measurePoints, center: measurePoints[0] };
     const finalId = editingLead ? editingLead.id : Date.now();
     const finalLead = { ...leadData, id: finalId };
-    
     let savedToCloud = false;
-
-    // 1. Try Saving to Supabase
     try {
         if (editingLead) {
           const { error } = await supabase.from('scout_leads').update(leadData).eq('id', finalId);
@@ -412,66 +323,39 @@ const RealEstateSearchApp = () => {
           const { error } = await supabase.from('scout_leads').insert([finalLead]);
           if (!error) savedToCloud = true;
         }
-    } catch (err) {
-        console.warn("Cloud save failed, switching to local.");
-    }
-
-    // 2. Always Save to Local Storage (Backup)
+    } catch (err) { console.warn("Cloud save failed, switching to local."); }
     saveToLocal(finalLead);
-
-    // 3. Update State
-    if(editingLead) {
-        setLeads(leads.map(l => l.id === finalId ? finalLead : l));
-    } else {
-        setLeads([finalLead, ...leads]);
-    }
-
+    if(editingLead) { setLeads(leads.map(l => l.id === finalId ? finalLead : l)); } else { setLeads([finalLead, ...leads]); }
     finishSave();
-    
-    if(savedToCloud) alert("Saved to Cloud & Local Backup!");
-    else alert("Saved Locally (Offline Mode).");
+    if(savedToCloud) alert("Saved to Cloud & Local Backup!"); else alert("Saved Locally (Offline Mode).");
   };
 
-  const finishSave = () => { 
-    setMeasurePoints([]); setRedoStack([]); setIsMeasuring(false); 
-    setEditingLead(null); setShowSaveForm(false); setShowCoordsPanel(false); 
-  };
-  
+  const finishSave = () => { setMeasurePoints([]); setRedoStack([]); setIsMeasuring(false); setEditingLead(null); setShowSaveForm(false); setShowCoordsPanel(false); };
   const handleDelete = async (id) => { 
     if (window.confirm("Delete this lead?")) { 
-        // Try cloud delete
         try { await supabase.from('scout_leads').delete().eq('id', id); } catch(e){}
-        
-        // Local delete
         const current = JSON.parse(localStorage.getItem('scout_leads_backup') || '[]');
         const filtered = current.filter(l => l.id !== id);
         localStorage.setItem('scout_leads_backup', JSON.stringify(filtered));
-
         setLeads(leads.filter(l => l.id !== id)); 
     } 
   };
 
+  const updatePointPosition = (index, newLatLng) => { const u = [...measurePoints]; u[index] = newLatLng; setMeasurePoints(u); setTempArea(calculateAcres(u)); };
+  const handleCoordInput = (index, field, value) => { const u = [...measurePoints]; u[index] = { ...u[index], [field]: parseFloat(value) }; setMeasurePoints(u); setTempArea(calculateAcres(u)); };
+  
   // --- MAP CLICK ---
   const MapClickHandler = () => {
     useMapEvents({
       click(e) {
         if (isMeasuring && isAdmin) {
-          const newPoints = [...measurePoints, e.latlng];
-          setMeasurePoints(newPoints); setRedoStack([]); 
-          setTempArea(calculateAcres(newPoints)); 
-          setShowCoordsPanel(true); setShowPointList(false);
+          const newPoints = [...measurePoints, e.latlng]; setMeasurePoints(newPoints); setRedoStack([]); setTempArea(calculateAcres(newPoints)); setShowCoordsPanel(true); setShowPointList(false);
         } else if (isRadarMode && isAdmin) {
           const { lat, lng } = e.latlng;
-          const distances = GROWTH_NODES.map(node => ({ 
-             ...node, dist: calculateDistance(lat, lng, node.lat, node.lng) 
-          })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist));
-          const nearestVillage = VILLAGE_PRICES.map(v => ({ 
-             ...v, dist: calculateDistance(lat, lng, v.lat, v.lng) 
-          })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist))[0];
+          const distances = GROWTH_NODES.map(node => ({ ...node, dist: calculateDistance(lat, lng, node.lat, node.lng) })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist));
+          const nearestVillage = VILLAGE_PRICES.map(v => ({ ...v, dist: calculateDistance(lat, lng, v.lat, v.lng) })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist))[0];
           setRadarResults({ pos: e.latlng, nodes: distances.slice(0, 3), village: nearestVillage });
-        } else { 
-          setShowToolsMenu(false); 
-        }
+        } else { setShowToolsMenu(false); }
       },
     });
     return null;
@@ -484,17 +368,14 @@ const RealEstateSearchApp = () => {
       dragend(e) {
         const newCenter = e.target.getLatLng();
         if (isMeasuring && measurePoints.length > 0 && dragStartPos.current) {
-           const latShift = newCenter.lat - dragStartPos.current.lat;
-           const lngShift = newCenter.lng - dragStartPos.current.lng;
-           const shiftedPoints = measurePoints.map(p => ({ lat: p.lat + latShift, lng: p.lng + lngShift }));
-           setMeasurePoints(shiftedPoints);
+           const latShift = newCenter.lat - dragStartPos.current.lat; const lngShift = newCenter.lng - dragStartPos.current.lng;
+           const shiftedPoints = measurePoints.map(p => ({ lat: p.lat + latShift, lng: p.lng + lngShift })); setMeasurePoints(shiftedPoints);
         }
         setCenterPos(newCenter);
       },
     }), [isMeasuring, measurePoints]); 
     return <Marker draggable={true} eventHandlers={eventHandlers} position={centerPos} ref={markerRef}><Popup>{isMeasuring ? "Drag to move shape" : "Search Center"}</Popup></Marker>;
   };
-
   const DraggableVertex = ({ position, index }) => {
     const markerRef = useRef(null);
     const eventHandlers = useMemo(() => ({ drag(e) { updatePointPosition(index, e.latlng); }, dragend(e) { updatePointPosition(index, e.target.getLatLng()); }, }), [index]);
@@ -509,21 +390,26 @@ const RealEstateSearchApp = () => {
       
       {/* HEADER */}
       <div className="bg-white shadow-md p-4 z-[5000] relative flex flex-col md:flex-row justify-between items-center h-auto md:h-16 gap-4 shrink-0">
-        <div>
-           <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-             <Crosshair className="text-red-600"/> Satellite Scout Pro
-             {usingOfflineMode && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded flex items-center gap-1"><WifiOff size={10}/> Offline</span>}
-           </h1>
-        </div>
+        <div><h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Crosshair className="text-red-600"/> Satellite Scout Pro {usingOfflineMode && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded flex items-center gap-1"><WifiOff size={10}/> Offline</span>}</h1></div>
 
-        {/* SEARCH BAR */}
+        {/* UNIVERSAL SEARCH BAR */}
         <div className="flex-1 max-w-md mx-4 relative">
           <div className="flex items-center bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200">
             <Search size={18} className="text-gray-500 mr-2"/>
-            <input type="text" placeholder="Search..." className="bg-transparent border-none outline-none text-sm w-full" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-            {searchQuery && <button onClick={() => setSearchQuery('')}><X size={14} className="text-gray-400"/></button>}
+            <input type="text" placeholder="Search saved... or Paste Link/Coords" className="bg-transparent border-none outline-none text-sm w-full" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            
+            {/* Show 'GO' button if text looks like a link or coord */}
+            {(searchQuery.includes('http') || searchQuery.includes(',') || searchQuery.match(/\d/)) && (
+                <button onClick={handleExternalSearch} className="bg-blue-600 text-white p-1 rounded-md ml-2 hover:bg-blue-700 flex items-center gap-1 text-xs px-2 font-bold animate-pulse">
+                    GO <ArrowRight size={12}/>
+                </button>
+            )}
+            
+            {searchQuery && !searchQuery.includes('http') && <button onClick={() => setSearchQuery('')}><X size={14} className="text-gray-400"/></button>}
           </div>
-          {searchQuery && filteredLeads.length > 0 && (
+          
+          {/* Dropdown for Saved Leads */}
+          {searchQuery && filteredLeads.length > 0 && !searchQuery.includes('http') && !searchQuery.match(/\d{2}\./) && (
             <div className="absolute top-full left-0 right-0 bg-white mt-1 shadow-xl rounded-lg border border-gray-100 z-50 max-h-60 overflow-y-auto">
               {filteredLeads.map(lead => (
                 <div key={lead.id} onClick={() => { setCenterPos(lead.center); setSearchQuery(''); }} className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0">
@@ -536,29 +422,23 @@ const RealEstateSearchApp = () => {
         </div>
         
         <div className="flex items-center gap-2">
-          
-          {/* ADMIN TOOLS */}
           {isAdmin ? (
              <>
                 <button onClick={() => { setIsRadarMode(!isRadarMode); setIsMeasuring(false); setRadarResults(null); }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${isRadarMode ? 'bg-purple-100 text-purple-700 border-purple-200 animate-pulse' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}><Radar size={16}/> Radar</button>
-                <button onClick={handleGeneratePDF} className="p-2 text-red-600 hover:bg-red-50 rounded-lg border border-red-100 bg-white" title="Download PDF Report"><FileText size={20}/></button>
+                <button onClick={handleGeneratePDF} className="p-2 text-red-600 hover:bg-red-50 rounded-lg border border-red-100 bg-white" title="Download PDF"><FileText size={20}/></button>
                 <div className="h-6 w-px bg-gray-300 mx-1"></div>
                 <button onClick={() => { setIsMeasuring(!isMeasuring); if(!isMeasuring) { setMeasurePoints([]); setRedoStack([]); setEditingLead(null); setIsRadarMode(false); } }} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold border transition-colors ${isMeasuring ? 'bg-orange-500 text-white border-orange-600' : 'text-gray-600 hover:bg-gray-200'}`}><Ruler size={16}/> {isMeasuring ? 'Stop' : 'Measure'}</button>
-                <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"><Upload size={20}/></button>
-                <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json,.geojson,.kml" />
+                <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"><Upload size={20}/></button> <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json,.geojson,.kml" />
                 <button onClick={handleExportBackup} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Export Backup"><Download size={20}/></button>
                 <button onClick={() => setIsAdmin(false)} className="p-2 text-gray-400 hover:text-red-500"><Unlock size={20}/></button>
              </>
-          ) : (
-             <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-900"><Lock size={14}/> Admin Login</button>
-          )}
-
+          ) : ( <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-900"><Lock size={14}/> Admin Login</button> )}
           <button onClick={() => setShowResources(true)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-100 bg-white"><BookOpen size={20}/></button>
-          
           <div className="relative">
              <button onClick={() => setShowToolsMenu(!showToolsMenu)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border bg-white text-gray-700 border-gray-300 hover:bg-gray-50"><Globe size={16}/> Tools</button>
              {showToolsMenu && (
                 <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 z-[5001]">
+                   <div className="text-[10px] font-bold text-gray-400 uppercase px-2 mb-1">External Apps</div>
                    <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><ExternalLink size={14}/> Open Google Earth</button>
                    <button onClick={() => { window.open("https://bhuvan-app1.nrsc.gov.in/bhuvan2d/bhuvan/bhuvan2d.php", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><Globe size={14}/> Open Bhuvan (2D)</button>
                    <button onClick={() => { window.open("https://bhubharati.telangana.gov.in/knowLandStatus", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><div className="w-4 flex justify-center text-[10px] font-bold">B</div> Open Bhubharati</button>
@@ -570,40 +450,11 @@ const RealEstateSearchApp = () => {
         </div>
       </div>
 
-      {/* LOGIN & RESOURCES MODALS */}
-      {showLogin && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm">
-           <div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs">
-              <h2 className="text-xl font-bold mb-4 text-center">Enter Access PIN</h2>
-              <form onSubmit={handleLogin} className="space-y-3">
-                 <input type="password" name="pin" className="w-full border p-2 rounded text-center text-2xl tracking-widest" autoFocus placeholder="****" />
-                 <div className="flex gap-2"><button type="button" onClick={() => setShowLogin(false)} className="flex-1 py-2 bg-gray-100 rounded">Cancel</button><button type="submit" className="flex-1 bg-black text-white py-2 rounded font-bold">Unlock</button></div>
-              </form>
-           </div>
-        </div>
-      )}
+      {showLogin && ( <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs"><h2 className="text-xl font-bold mb-4 text-center">Enter Access PIN</h2><form onSubmit={handleLogin} className="space-y-3"><input type="password" name="pin" className="w-full border p-2 rounded text-center text-2xl tracking-widest" autoFocus placeholder="****" /><div className="flex gap-2"><button type="button" onClick={() => setShowLogin(false)} className="flex-1 py-2 bg-gray-100 rounded">Cancel</button><button type="submit" className="flex-1 bg-black text-white py-2 rounded font-bold">Unlock</button></div></form></div></div> )}
+      {showResources && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div><div className="space-y-6"><div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div><div><h3 className="font-bold mb-2">Checklist</h3><ul className="list-disc pl-5 text-sm space-y-1"><li>Check Link Docs (30 Yrs)</li><li>Check Encumbrance Certificate</li><li>Check Prohibited List (Sec 22A)</li><li>Verify FTL / Nala Buffer Zones</li></ul></div></div></div></div> )}
 
-      {showResources && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6">
-             <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div>
-             <div className="space-y-6">
-                <div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div>
-                <div><h3 className="font-bold mb-2">Checklist</h3><ul className="list-disc pl-5 text-sm space-y-1"><li>Check Link Docs (30 Yrs)</li><li>Check Encumbrance Certificate (Online & Manual)</li><li>Check Prohibited List (Sec 22A)</li><li>Verify FTL / Nala Buffer Zones</li></ul></div>
-             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MAP WRAPPER */}
       <div className="flex flex-1 relative h-[85vh]">
-        {showCoordsPanel && isMeasuring && (
-           <div className="w-80 bg-white shadow-xl z-10 overflow-y-auto border-r border-gray-200 flex flex-col">
-              <div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-sm">Measure Mode</h3><button onClick={() => setShowCoordsPanel(false)}><X size={16}/></button></div>
-              <div className="p-4"><button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded text-xs font-bold mb-2">Simplify Shape</button><div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div></div>
-              <div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Shape</button></div>
-           </div>
-        )}
+        {showCoordsPanel && isMeasuring && ( <div className="w-80 bg-white shadow-xl z-10 overflow-y-auto border-r border-gray-200 flex flex-col"><div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-sm">Measure Mode</h3><button onClick={() => setShowCoordsPanel(false)}><X size={16}/></button></div><div className="p-4"><button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded text-xs font-bold mb-2">Simplify Shape</button><div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div></div><div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Shape</button></div></div> )}
 
         <div id="map-print-container" className="flex-1 relative bg-gray-200">
           <MapContainer center={centerPos} zoom={13} maxZoom={22} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }} ref={mapRef} preferCanvas={true}>
@@ -620,17 +471,10 @@ const RealEstateSearchApp = () => {
             
             {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
             
-            {radarResults && (
-               <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
-                  <div className="min-w-[200px]">
-                     <div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-center flex items-center justify-center gap-2"><Radar size={14}/> Growth Radar</div>
-                     <div className="space-y-2 pt-2">
-                        {radarResults.nodes.map((node, i) => (<div key={i} className="flex justify-between text-xs border-b pb-1"><span className="font-bold text-gray-700">{node.name}</span><span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span></div>))}
-                     </div>
-                     <div className="mt-3 pt-2 bg-yellow-50 p-2 rounded border border-yellow-200"><div className="text-[10px] text-gray-500 uppercase font-bold">Price Est ({radarResults.village.name})</div><div className="text-lg font-bold text-gray-800">{radarResults.village.price} <span className="text-xs font-normal text-gray-500">/ sq yd</span></div></div>
-                  </div>
-               </Popup>
-            )}
+            {/* Search Result Pin */}
+            {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Location<br/>{tempSearchMarker.lat.toFixed(4)}, {tempSearchMarker.lng.toFixed(4)}</Popup></Marker>}
+
+            {radarResults && ( <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}><div className="min-w-[200px]"><div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-center flex items-center justify-center gap-2"><Radar size={14}/> Growth Radar</div><div className="space-y-2 pt-2">{radarResults.nodes.map((node, i) => (<div key={i} className="flex justify-between text-xs border-b pb-1"><span className="font-bold text-gray-700">{node.name}</span><span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span></div>))}</div><div className="mt-3 pt-2 bg-yellow-50 p-2 rounded border border-yellow-200"><div className="text-[10px] text-gray-500 uppercase font-bold">Price Est ({radarResults.village.name})</div><div className="text-lg font-bold text-gray-800">{radarResults.village.price} <span className="text-xs font-normal text-gray-500">/ sq yd</span></div></div></div></Popup> )}
             
             <DraggableMarker />
             <MapClickHandler />
@@ -638,19 +482,7 @@ const RealEstateSearchApp = () => {
         </div>
       </div>
 
-      {showSaveForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-[2000] flex justify-center items-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl">
-            <h2 className="text-lg font-bold mb-4">Save Lead</h2>
-            <form onSubmit={handleSaveShape} className="space-y-4">
-              <input name="label" required className="w-full border p-2 rounded" placeholder="Name" />
-              <input name="survey_no" className="w-full border p-2 rounded" placeholder="Survey No" />
-              <textarea name="note" className="w-full border p-2 rounded" placeholder="Notes..." />
-              <div className="flex gap-2"><button type="button" onClick={() => setShowSaveForm(false)} className="flex-1 bg-gray-100 py-2 rounded">Cancel</button><button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold">Save</button></div>
-            </form>
-          </div>
-        </div>
-      )}
+      {showSaveForm && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[2000] flex justify-center items-center p-4"><div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl"><h2 className="text-lg font-bold mb-4">Save Lead</h2><form onSubmit={handleSaveShape} className="space-y-4"><input name="label" required className="w-full border p-2 rounded" placeholder="Name" /><input name="survey_no" className="w-full border p-2 rounded" placeholder="Survey No" /><textarea name="note" className="w-full border p-2 rounded" placeholder="Notes..." /><div className="flex gap-2"><button type="button" onClick={() => setShowSaveForm(false)} className="flex-1 bg-gray-100 py-2 rounded">Cancel</button><button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold">Save</button></div></form></div></div> )}
     </div>
   );
 };
