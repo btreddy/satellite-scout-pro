@@ -4,7 +4,7 @@ import {
   X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, 
   Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, 
   ChevronUp, BookOpen, AlertTriangle, CheckCircle, Radar, FileText, 
-  Lock, Unlock, WifiOff, ArrowRight, Phone 
+  Lock, Unlock, WifiOff, ArrowRight, Phone, Map 
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -34,10 +34,12 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// --- DATABASE: GROWTH NODES (Distances) ---
+// --- DATABASE: GROWTH NODES (Added RRR Junctions) ---
 const GROWTH_NODES = [
   { name: "Bharat Future City (Fourth City)", lat: 16.9850, lng: 78.6500, type: "Mega Project" },
   { name: "Amazon Data Center (Meerkhanpet)", lat: 17.0600, lng: 78.6300, type: "IT Hub" },
+  { name: "RRR (Shadnagar Crossing)", lat: 17.0350, lng: 78.2100, type: "Transport" },
+  { name: "RRR (Ibrahimpatnam Crossing)", lat: 17.1850, lng: 78.6400, type: "Transport" },
   { name: "RGIA Airport", lat: 17.2403, lng: 78.4294, type: "Transport" },
   { name: "Mucherla Pharma Cluster", lat: 16.9500, lng: 78.6100, type: "Industrial" },
   { name: "TCS Adibatla", lat: 17.2100, lng: 78.5300, type: "IT Hub" }
@@ -184,7 +186,7 @@ const RealEstateSearchApp = () => {
     else { alert("Incorrect PIN"); }
   };
 
-  // --- PDF REPORT (UPDATED) ---
+  // --- PDF REPORT ---
   const handleGeneratePDF = async () => {
     const hasActiveDrawing = measurePoints.length > 2;
     if(!radarResults && !editingLead && !hasActiveDrawing) return alert("Please Measure a land or run Growth Radar first.");
@@ -225,7 +227,7 @@ const RealEstateSearchApp = () => {
         radarResults.nodes.forEach(node => { doc.text(`${node.name}: ${node.dist} km`, 10, y); y+=6; });
         y+=4;
         doc.setFontSize(11);
-        doc.setTextColor(0, 100, 0); // Green color for contact
+        doc.setTextColor(0, 100, 0);
         doc.text(`Price Estimate: Contact Admin for Quote`, 10, y);
     }
     
@@ -342,8 +344,8 @@ const RealEstateSearchApp = () => {
         } else if (isRadarMode && isAdmin) {
           const { lat, lng } = e.latlng;
           const distances = GROWTH_NODES.map(node => ({ ...node, dist: calculateDistance(lat, lng, node.lat, node.lng) })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist));
-          // REMOVED VILLAGE LOGIC
-          setRadarResults({ pos: e.latlng, nodes: distances.slice(0, 3) });
+          // NEW: Add Radar results including 'pos' for Google Earth Link
+          setRadarResults({ pos: e.latlng, nodes: distances.slice(0, 4) }); 
         } else { setShowToolsMenu(false); }
       },
     });
@@ -454,12 +456,16 @@ const RealEstateSearchApp = () => {
             {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
             {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Location<br/>{tempSearchMarker.lat.toFixed(4)}, {tempSearchMarker.lng.toFixed(4)}</Popup></Marker>}
 
+            {/* RADAR POPUP WITH EARTH LINK */}
             {radarResults && ( 
                <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
                   <div className="min-w-[200px]">
                      <div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-center flex items-center justify-center gap-2"><Radar size={14}/> Growth Radar</div>
                      <div className="space-y-2 pt-2">
                         {radarResults.nodes.map((node, i) => (<div key={i} className="flex justify-between text-xs border-b pb-1"><span className="font-bold text-gray-700">{node.name}</span><span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span></div>))}
+                     </div>
+                     <div className="mt-2 text-center">
+                        <button onClick={() => window.open(`https://earth.google.com/web/@${radarResults.pos.lat},${radarResults.pos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank')} className="text-[10px] text-blue-600 underline flex items-center justify-center gap-1"><ExternalLink size={10}/> Open in Earth (History)</button>
                      </div>
                      <div className="mt-3 pt-2 bg-blue-50 p-2 rounded border border-blue-200 text-center">
                         <div className="text-xs font-bold text-blue-800 flex items-center justify-center gap-1"><Phone size={12}/> For Price Quote</div>
