@@ -4,7 +4,7 @@ import {
   X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, 
   Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, 
   ChevronUp, BookOpen, AlertTriangle, CheckCircle, Radar, FileText, 
-  Lock, Unlock, WifiOff, ArrowRight, MapPin 
+  Lock, Unlock, WifiOff, ArrowRight, Phone 
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -13,7 +13,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
-const APP_PIN = "9959879260"; 
+const APP_PIN = "1234"; 
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -34,21 +34,13 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// --- DATABASE: GROWTH NODES ---
+// --- DATABASE: GROWTH NODES (Distances) ---
 const GROWTH_NODES = [
   { name: "Bharat Future City (Fourth City)", lat: 16.9850, lng: 78.6500, type: "Mega Project" },
   { name: "Amazon Data Center (Meerkhanpet)", lat: 17.0600, lng: 78.6300, type: "IT Hub" },
   { name: "RGIA Airport", lat: 17.2403, lng: 78.4294, type: "Transport" },
   { name: "Mucherla Pharma Cluster", lat: 16.9500, lng: 78.6100, type: "Industrial" },
   { name: "TCS Adibatla", lat: 17.2100, lng: 78.5300, type: "IT Hub" }
-];
-
-const VILLAGE_PRICES = [
-  { name: "Shadnagar", price: "₹12k - ₹18k", lat: 17.0700, lng: 78.2000 },
-  { name: "Maheshwaram", price: "₹18k - ₹25k", lat: 17.1300, lng: 78.4300 },
-  { name: "Kothur", price: "₹15k - ₹22k", lat: 17.1400, lng: 78.2900 },
-  { name: "Kandukur", price: "₹10k - ₹15k", lat: 17.0500, lng: 78.4800 },
-  { name: "Amangal", price: "₹6k - ₹9k", lat: 16.8500, lng: 78.5200 }
 ];
 
 // --- UTILS ---
@@ -125,7 +117,7 @@ const RealEstateSearchApp = () => {
   const [showResources, setShowResources] = useState(false); 
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [centerPos, setCenterPos] = useState({ lat: 17.1350, lng: 78.4300 }); 
-  const [tempSearchMarker, setTempSearchMarker] = useState(null); // New state for search pin
+  const [tempSearchMarker, setTempSearchMarker] = useState(null);
 
   const dragStartPos = useRef(null);
   const fileInputRef = useRef(null);
@@ -147,9 +139,7 @@ const RealEstateSearchApp = () => {
     }
   }, [searchQuery, leads]);
 
-  // NEW: Handle External Links / Coords
   const handleExternalSearch = () => {
-    // 1. Regex for "lat,lng" (e.g. 17.123, 78.123)
     const coordRegex = /(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/;
     const match = searchQuery.match(coordRegex);
 
@@ -158,13 +148,12 @@ const RealEstateSearchApp = () => {
         const lng = parseFloat(match[2]);
         setCenterPos({ lat, lng });
         setTempSearchMarker({ lat, lng });
-        setSearchQuery(''); // Clear bar
+        setSearchQuery(''); 
         alert(`Flying to ${lat}, ${lng}`);
     } else if (searchQuery.includes("goo.gl") || searchQuery.includes("maps.app")) {
-        // Short Link Trap
-        alert("⚠️ Short Link Detected!\n\nDue to browser security, I cannot un-shorten this link directly.\n\n1. Click the link to open it.\n2. Copy the LONG URL from the address bar.\n3. Paste that here.");
+        alert("⚠️ Short Link Detected!\n\n1. Click the link to open it.\n2. Copy the LONG URL from the address bar.\n3. Paste that here.");
     } else {
-        alert("No coordinates found in text. Please paste 'Lat,Lng' or a full Google Maps link.");
+        alert("No coordinates found. Paste 'Lat,Lng' or a full Google Maps link.");
     }
   };
 
@@ -195,7 +184,7 @@ const RealEstateSearchApp = () => {
     else { alert("Incorrect PIN"); }
   };
 
-  // --- PDF REPORT ---
+  // --- PDF REPORT (UPDATED) ---
   const handleGeneratePDF = async () => {
     const hasActiveDrawing = measurePoints.length > 2;
     if(!radarResults && !editingLead && !hasActiveDrawing) return alert("Please Measure a land or run Growth Radar first.");
@@ -236,7 +225,8 @@ const RealEstateSearchApp = () => {
         radarResults.nodes.forEach(node => { doc.text(`${node.name}: ${node.dist} km`, 10, y); y+=6; });
         y+=4;
         doc.setFontSize(11);
-        doc.text(`Estimated Village Price: ${radarResults.village.price} / sq yd`, 10, y);
+        doc.setTextColor(0, 100, 0); // Green color for contact
+        doc.text(`Price Estimate: Contact Admin for Quote`, 10, y);
     }
     
     doc.setFontSize(8);
@@ -299,7 +289,6 @@ const RealEstateSearchApp = () => {
     const a = document.createElement('a'); a.href = dataStr; a.download = `SatelliteScout_Backup_${new Date().toISOString().slice(0,10)}.json`; a.click();
   };
 
-  // --- SAVE LOGIC (HYBRID) ---
   const saveToLocal = (leadItem) => {
     try {
         const current = JSON.parse(localStorage.getItem('scout_leads_backup') || '[]');
@@ -353,8 +342,8 @@ const RealEstateSearchApp = () => {
         } else if (isRadarMode && isAdmin) {
           const { lat, lng } = e.latlng;
           const distances = GROWTH_NODES.map(node => ({ ...node, dist: calculateDistance(lat, lng, node.lat, node.lng) })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist));
-          const nearestVillage = VILLAGE_PRICES.map(v => ({ ...v, dist: calculateDistance(lat, lng, v.lat, v.lng) })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist))[0];
-          setRadarResults({ pos: e.latlng, nodes: distances.slice(0, 3), village: nearestVillage });
+          // REMOVED VILLAGE LOGIC
+          setRadarResults({ pos: e.latlng, nodes: distances.slice(0, 3) });
         } else { setShowToolsMenu(false); }
       },
     });
@@ -397,18 +386,11 @@ const RealEstateSearchApp = () => {
           <div className="flex items-center bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200">
             <Search size={18} className="text-gray-500 mr-2"/>
             <input type="text" placeholder="Search saved... or Paste Link/Coords" className="bg-transparent border-none outline-none text-sm w-full" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-            
-            {/* Show 'GO' button if text looks like a link or coord */}
             {(searchQuery.includes('http') || searchQuery.includes(',') || searchQuery.match(/\d/)) && (
-                <button onClick={handleExternalSearch} className="bg-blue-600 text-white p-1 rounded-md ml-2 hover:bg-blue-700 flex items-center gap-1 text-xs px-2 font-bold animate-pulse">
-                    GO <ArrowRight size={12}/>
-                </button>
+                <button onClick={handleExternalSearch} className="bg-blue-600 text-white p-1 rounded-md ml-2 hover:bg-blue-700 flex items-center gap-1 text-xs px-2 font-bold animate-pulse">GO <ArrowRight size={12}/></button>
             )}
-            
             {searchQuery && !searchQuery.includes('http') && <button onClick={() => setSearchQuery('')}><X size={14} className="text-gray-400"/></button>}
           </div>
-          
-          {/* Dropdown for Saved Leads */}
           {searchQuery && filteredLeads.length > 0 && !searchQuery.includes('http') && !searchQuery.match(/\d{2}\./) && (
             <div className="absolute top-full left-0 right-0 bg-white mt-1 shadow-xl rounded-lg border border-gray-100 z-50 max-h-60 overflow-y-auto">
               {filteredLeads.map(lead => (
@@ -451,7 +433,7 @@ const RealEstateSearchApp = () => {
       </div>
 
       {showLogin && ( <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs"><h2 className="text-xl font-bold mb-4 text-center">Enter Access PIN</h2><form onSubmit={handleLogin} className="space-y-3"><input type="password" name="pin" className="w-full border p-2 rounded text-center text-2xl tracking-widest" autoFocus placeholder="****" /><div className="flex gap-2"><button type="button" onClick={() => setShowLogin(false)} className="flex-1 py-2 bg-gray-100 rounded">Cancel</button><button type="submit" className="flex-1 bg-black text-white py-2 rounded font-bold">Unlock</button></div></form></div></div> )}
-      {showResources && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div><div className="space-y-6"><div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div><div><h3 className="font-bold mb-2">Checklist</h3><ul className="list-disc pl-5 text-sm space-y-1"><li>Check Link Docs (30 Yrs)</li><li>Check Encumbrance Certificate</li><li>Check Prohibited List (Sec 22A)</li><li>Verify FTL / Nala Buffer Zones</li></ul></div></div></div></div> )}
+      {showResources && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div><div className="space-y-6"><div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div><div><h3 className="font-bold mb-2">Checklist</h3><ul className="list-disc pl-5 text-sm space-y-1"><li>Check Link Docs (30 Yrs)</li><li>Check Encumbrance Certificate (Online & Manual)</li><li>Check Prohibited List (Sec 22A)</li><li>Verify FTL / Nala Buffer Zones</li></ul></div></div></div></div> )}
 
       <div className="flex flex-1 relative h-[85vh]">
         {showCoordsPanel && isMeasuring && ( <div className="w-80 bg-white shadow-xl z-10 overflow-y-auto border-r border-gray-200 flex flex-col"><div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-sm">Measure Mode</h3><button onClick={() => setShowCoordsPanel(false)}><X size={16}/></button></div><div className="p-4"><button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded text-xs font-bold mb-2">Simplify Shape</button><div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div></div><div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Shape</button></div></div> )}
@@ -460,8 +442,8 @@ const RealEstateSearchApp = () => {
           <MapContainer center={centerPos} zoom={13} maxZoom={22} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }} ref={mapRef} preferCanvas={true}>
             <MapController center={centerPos} />
             <LayersControl position="topright">
-              <LayersControl.BaseLayer checked name="Google Hybrid"><TileLayer url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" attribution='&copy; Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
-              <LayersControl.BaseLayer name="Google Streets"><TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" attribution='&copy; Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
+              <LayersControl.BaseLayer checked name="Google Hybrid"><TileLayer url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" attribution='© Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
+              <LayersControl.BaseLayer name="Google Streets"><TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" attribution='© Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
             </LayersControl>
             
             {filteredLeads.map((lead) => {
@@ -470,11 +452,22 @@ const RealEstateSearchApp = () => {
             })}
             
             {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
-            
-            {/* Search Result Pin */}
             {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Location<br/>{tempSearchMarker.lat.toFixed(4)}, {tempSearchMarker.lng.toFixed(4)}</Popup></Marker>}
 
-            {radarResults && ( <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}><div className="min-w-[200px]"><div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-center flex items-center justify-center gap-2"><Radar size={14}/> Growth Radar</div><div className="space-y-2 pt-2">{radarResults.nodes.map((node, i) => (<div key={i} className="flex justify-between text-xs border-b pb-1"><span className="font-bold text-gray-700">{node.name}</span><span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span></div>))}</div><div className="mt-3 pt-2 bg-yellow-50 p-2 rounded border border-yellow-200"><div className="text-[10px] text-gray-500 uppercase font-bold">Price Est ({radarResults.village.name})</div><div className="text-lg font-bold text-gray-800">{radarResults.village.price} <span className="text-xs font-normal text-gray-500">/ sq yd</span></div></div></div></Popup> )}
+            {radarResults && ( 
+               <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
+                  <div className="min-w-[200px]">
+                     <div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-center flex items-center justify-center gap-2"><Radar size={14}/> Growth Radar</div>
+                     <div className="space-y-2 pt-2">
+                        {radarResults.nodes.map((node, i) => (<div key={i} className="flex justify-between text-xs border-b pb-1"><span className="font-bold text-gray-700">{node.name}</span><span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span></div>))}
+                     </div>
+                     <div className="mt-3 pt-2 bg-blue-50 p-2 rounded border border-blue-200 text-center">
+                        <div className="text-xs font-bold text-blue-800 flex items-center justify-center gap-1"><Phone size={12}/> For Price Quote</div>
+                        <div className="font-bold text-gray-800 text-sm">Contact Admin</div>
+                     </div>
+                  </div>
+               </Popup> 
+            )}
             
             <DraggableMarker />
             <MapClickHandler />
