@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polygon, LayersControl, useMapEvents, useMap } from 'react-leaflet';
-import { X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, ChevronUp, BookOpen, AlertTriangle, CheckCircle, LandPlot } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { supabase } from './supabaseClient';
@@ -35,14 +35,13 @@ const calculateAcres = (latLngs) => {
     area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
   }
   area = (Math.abs(area) * earthRadius * earthRadius) / 2;
-  return area / 4046.86; // Return raw float for formatting logic
+  return area / 4046.86; 
 };
 
-// --- FORMATTER: Acres vs Sq Yards ---
+// --- FORMATTER ---
 const formatArea = (acresVal) => {
   const ac = parseFloat(acresVal);
   if (ac < 1.0) {
-    // Convert to Sq Yards (1 Acre = 4840 Sq Yds)
     const sqYds = Math.round(ac * 4840);
     return `${sqYds.toLocaleString()} Sq Yds`;
   }
@@ -56,10 +55,7 @@ const MapController = ({ center }) => {
 };
 
 const RealEstateSearchApp = () => {
-  // --- AUTH STATE (Bypassed) ---
   const [session, setSession] = useState(true); 
-  
-  // --- APP STATE ---
   const [leads, setLeads] = useState([]); 
   const [filteredLeads, setFilteredLeads] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,6 +70,7 @@ const RealEstateSearchApp = () => {
   const [showCoordsPanel, setShowCoordsPanel] = useState(false);
   const [showPointList, setShowPointList] = useState(false); 
   const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const [showResources, setShowResources] = useState(false); // NEW: Education Modal
   const [centerPos, setCenterPos] = useState({ lat: 17.1350, lng: 78.4300 }); 
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [tempArea, setTempArea] = useState(0);
@@ -81,10 +78,7 @@ const RealEstateSearchApp = () => {
   const dragStartPos = useRef(null);
   const fileInputRef = useRef(null);
 
-  // --- INITIAL LOAD ---
-  useEffect(() => {
-    fetchLeads();
-  }, []);
+  useEffect(() => { fetchLeads(); }, []);
 
   useEffect(() => {
     if (!searchQuery) { setFilteredLeads(leads); } 
@@ -120,7 +114,6 @@ const RealEstateSearchApp = () => {
     setRedoStack([]);
   };
 
-  // --- EXPORT BACKUP ---
   const handleExportBackup = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(leads));
     const downloadAnchorNode = document.createElement('a');
@@ -131,7 +124,6 @@ const RealEstateSearchApp = () => {
     downloadAnchorNode.remove();
   };
 
-  // --- SMART IMPORT LOGIC ---
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -141,77 +133,45 @@ const RealEstateSearchApp = () => {
       try {
         const json = JSON.parse(event.target.result);
         const importedLeads = [];
-
-        // CASE A: SW Maps GeoJSON
         if (json.type === 'FeatureCollection' && json.features) {
            const allPoints = json.features.every(f => f.geometry.type === 'Point');
-           
            if (allPoints && json.features.length > 2) {
                const confirmConnect = window.confirm(`Found ${json.features.length} separate points. Connect them into one shape?`);
                if (confirmConnect) {
-                   const combinedPoints = json.features.map(f => ({
-                       lat: f.geometry.coordinates[1],
-                       lng: f.geometry.coordinates[0]
-                   }));
+                   const combinedPoints = json.features.map(f => ({ lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }));
                    const acres = calculateAcres(combinedPoints);
                    const name = json.features[0].properties?.Name || "Connected Points";
-                   const newLead = {
-                        id: Date.now(),
-                        label: name,
-                        note: `Created from ${json.features.length} connected points`,
-                        acres: acres,
-                        points: combinedPoints,
-                        center: combinedPoints[0]
-                   };
+                   const newLead = { id: Date.now(), label: name, note: `Created from ${json.features.length} points`, acres: acres, points: combinedPoints, center: combinedPoints[0] };
                    importedLeads.push(newLead);
-                   supabase.from('scout_leads').insert([{
-                        label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center
-                   }]).then();
+                   supabase.from('scout_leads').insert([{ label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center }]).then();
                }
            } else {
                const confirmImport = window.confirm(`Found ${json.features.length} items. Import now?`);
                if(!confirmImport) return;
-
                for (const feature of json.features) {
                   let rawCoords = [];
                   const type = feature.geometry.type;
-                  
                   if (type === 'Polygon') rawCoords = feature.geometry.coordinates[0]; 
                   else if (type === 'LineString') rawCoords = feature.geometry.coordinates;
                   else if (type === 'MultiPolygon') rawCoords = feature.geometry.coordinates[0][0];
-
                   if (!rawCoords || rawCoords.length === 0) continue;
-
                   const points = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
-
                   if (points.length > 1) {
                      if (type === 'LineString') points.push(points[0]); 
                      const acres = calculateAcres(points);
                      const props = feature.properties || {};
                      const name = props.Name || props.name || `Imported Track`;
-                     
-                     const newLead = {
-                        id: Date.now() + Math.random(),
-                        label: name,
-                        note: `Imported from SW Maps (${type})`,
-                        acres: acres,
-                        points: points,
-                        center: points[0]
-                     };
+                     const newLead = { id: Date.now() + Math.random(), label: name, note: `Imported from SW Maps`, acres: acres, points: points, center: points[0] };
                      importedLeads.push(newLead);
-                     supabase.from('scout_leads').insert([{
-                        label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center
-                     }]).then();
+                     supabase.from('scout_leads').insert([{ label: newLead.label, note: newLead.note, acres: newLead.acres, points: newLead.points, center: newLead.center }]).then();
                   }
                }
            }
         } 
-        // CASE B: Backup
         else if (Array.isArray(json)) {
             const confirmBackup = window.confirm(`Found backup with ${json.length} leads. Restore them?`);
             if (confirmBackup) importedLeads.push(...json);
         }
-        
         if (importedLeads.length > 0) {
            setLeads(prev => [...importedLeads, ...prev]);
            setCenterPos(importedLeads[0].center);
@@ -259,46 +219,26 @@ const RealEstateSearchApp = () => {
   const handleSaveShape = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const leadData = {
-      label: formData.get('label'),
-      survey_no: formData.get('survey_no'),
-      note: formData.get('note'),
-      acres: tempArea,
-      points: measurePoints,
-      center: measurePoints[0]
-    };
-
+    const leadData = { label: formData.get('label'), survey_no: formData.get('survey_no'), note: formData.get('note'), acres: tempArea, points: measurePoints, center: measurePoints[0] };
     if (editingLead) {
       const { error } = await supabase.from('scout_leads').update(leadData).eq('id', editingLead.id);
       if (error) { alert('Update failed: ' + error.message); } 
-      else {
-        setLeads(leads.map(l => l.id === editingLead.id ? { ...l, ...leadData } : l));
-        finishSave();
-      }
+      else { setLeads(leads.map(l => l.id === editingLead.id ? { ...l, ...leadData } : l)); finishSave(); }
     } else {
       const { data, error } = await supabase.from('scout_leads').insert([leadData]).select();
       if (error) { alert('Save failed: ' + error.message); } 
-      else {
-        setLeads([data[0], ...leads]);
-        finishSave();
-      }
+      else { setLeads([data[0], ...leads]); finishSave(); }
     }
   };
 
   const finishSave = () => {
-    setMeasurePoints([]);
-    setRedoStack([]);
-    setIsMeasuring(false);
-    setEditingLead(null); 
-    setShowSaveForm(false);
-    setShowCoordsPanel(false);
+    setMeasurePoints([]); setRedoStack([]); setIsMeasuring(false); setEditingLead(null); setShowSaveForm(false); setShowCoordsPanel(false);
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this lead?")) return;
     const { error } = await supabase.from('scout_leads').delete().eq('id', id);
-    if (error) alert('Error: ' + error.message);
-    else setLeads(leads.filter(l => l.id !== id));
+    if (error) alert('Error: ' + error.message); else setLeads(leads.filter(l => l.id !== id));
   };
 
   const MapClickHandler = () => {
@@ -306,11 +246,7 @@ const RealEstateSearchApp = () => {
       click(e) {
         if (isMeasuring) {
           const newPoints = [...measurePoints, e.latlng];
-          setMeasurePoints(newPoints);
-          setRedoStack([]); 
-          setTempArea(calculateAcres(newPoints));
-          setShowCoordsPanel(true); 
-          setShowPointList(false);
+          setMeasurePoints(newPoints); setRedoStack([]); setTempArea(calculateAcres(newPoints)); setShowCoordsPanel(true); setShowPointList(false);
         } else { setShowToolsMenu(false); }
       },
     });
@@ -332,12 +268,7 @@ const RealEstateSearchApp = () => {
         setCenterPos(newCenter);
       },
     }), [isMeasuring, measurePoints]); 
-
-    return (
-      <Marker draggable={true} eventHandlers={eventHandlers} position={centerPos} ref={markerRef}>
-        <Popup>{isMeasuring ? "Drag to move shape" : "Search Center"}</Popup>
-      </Marker>
-    );
+    return <Marker draggable={true} eventHandlers={eventHandlers} position={centerPos} ref={markerRef}><Popup>{isMeasuring ? "Drag to move shape" : "Search Center"}</Popup></Marker>;
   };
 
   const DraggableVertex = ({ position, index }) => {
@@ -394,44 +325,120 @@ const RealEstateSearchApp = () => {
           
           <div className="h-6 w-px bg-gray-300 mx-1"></div>
           
-          {/* ACTION BUTTONS */}
+          {/* RESOURCES BUTTON (NEW) */}
+          <button onClick={() => setShowResources(true)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-100 bg-white" title="Investor Education">
+             <BookOpen size={20}/>
+          </button>
+
           <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Import File"><Upload size={20}/></button>
           <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json,.geojson,.kml" />
-
           <button onClick={handleExportBackup} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Download Backup"><Download size={20}/></button>
 
-          {/* TOOLS MENU (UPDATED) */}
+          {/* TOOLS MENU */}
           <div className="relative">
              <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${showToolsMenu ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
                 <Globe size={16}/> Tools
              </button>
-             
              {showToolsMenu && (
                 <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 z-[5001] animate-in fade-in zoom-in duration-150">
                    <div className="text-[10px] font-bold text-gray-400 uppercase px-2 mb-1">External Apps</div>
-                   
-                   <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
-                      <ExternalLink size={14}/> Open Google Earth
-                   </button>
-                   
-                   <button onClick={() => { window.open("https://bhuvan-app1.nrsc.gov.in/bhuvan2d/bhuvan/bhuvan2d.php", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
-                      <Globe size={14}/> Open Bhuvan (2D)
-                   </button>
-
-                   <button onClick={() => { window.open("https://bhubharati.telangana.gov.in/knowLandStatus", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
-                      <div className="w-4 flex justify-center text-[10px] font-bold">B</div> Open Bhubharati Status
-                   </button>
-
+                   <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"><ExternalLink size={14}/> Open Google Earth</button>
+                   <button onClick={() => { window.open("https://bhuvan-app1.nrsc.gov.in/bhuvan2d/bhuvan/bhuvan2d.php", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"><Globe size={14}/> Open Bhuvan (2D)</button>
+                   <button onClick={() => { window.open("https://bhubharati.telangana.gov.in/knowLandStatus", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"><div className="w-4 flex justify-center text-[10px] font-bold">B</div> Open Bhubharati Status</button>
                    <div className="h-px bg-gray-100 my-1"></div>
-
-                   <button onClick={() => { navigator.clipboard.writeText(`${centerPos.lat}, ${centerPos.lng}`); alert('Copied!'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2">
-                      <Copy size={14}/> Copy Coords
-                   </button>
+                   <button onClick={() => { navigator.clipboard.writeText(`${centerPos.lat}, ${centerPos.lng}`); alert('Copied!'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"><Copy size={14}/> Copy Coords</button>
                 </div>
              )}
           </div>
         </div>
       </div>
+
+      {/* RESOURCES MODAL (NEW) */}
+      {showResources && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+             {/* Modal Header */}
+             <div className="p-6 bg-blue-600 text-white flex justify-between items-center sticky top-0 z-10">
+                <div>
+                   <h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2>
+                   <p className="text-blue-100 text-sm">Official sources & checklist for Telangana.</p>
+                </div>
+                <button onClick={() => setShowResources(false)} className="bg-blue-700 p-2 rounded-full hover:bg-blue-800"><X size={20}/></button>
+             </div>
+
+             <div className="p-6 space-y-8">
+                {/* 1. OFFICIAL LINKS */}
+                <section>
+                   <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Globe size={18} className="text-blue-600"/> Official Government Portals</h3>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <a href="https://registration.telangana.gov.in/" target="_blank" className="p-4 border rounded-xl hover:bg-blue-50 transition-colors group">
+                         <div className="font-bold text-blue-700 group-hover:underline">IGRS Telangana</div>
+                         <div className="text-xs text-gray-500">Check Encumbrance Certificate (EC), Registration Market Value.</div>
+                      </a>
+                      <a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-4 border rounded-xl hover:bg-blue-50 transition-colors group">
+                         <div className="font-bold text-blue-700 group-hover:underline">Bhubharati / Dharani</div>
+                         <div className="text-xs text-gray-500">Check Land Status, Prohibited List, Passbook Details.</div>
+                      </a>
+                      <a href="https://www.hmda.gov.in/" target="_blank" className="p-4 border rounded-xl hover:bg-blue-50 transition-colors group">
+                         <div className="font-bold text-blue-700 group-hover:underline">HMDA Master Plan</div>
+                         <div className="text-xs text-gray-500">Verify Land Use Zone (Residential vs Conservation).</div>
+                      </a>
+                      <a href="http://rera.telangana.gov.in/" target="_blank" className="p-4 border rounded-xl hover:bg-blue-50 transition-colors group">
+                         <div className="font-bold text-blue-700 group-hover:underline">RERA Telangana</div>
+                         <div className="text-xs text-gray-500">Verify Project Registration & Legal Approvals.</div>
+                      </a>
+                   </div>
+                </section>
+
+                {/* 2. CHECKLIST */}
+                <section className="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                   <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><CheckCircle size={18} className="text-green-600"/> 10-Point Due Diligence Checklist</h3>
+                   <ul className="space-y-3 text-sm text-gray-700">
+                      {[
+                        "Verify 'Link Documents' for the last 30 years (Flow of Title).",
+                        "Check Encumbrance Certificate (EC) on IGRS Portal.",
+                        "Check Prohibited Lands List (Section 22A) on Dharani.",
+                        "Verify 'Land Use Zone' in HMDA/DTCP Master Plan.",
+                        "Check for any court cases (Litigation) using Survey Number.",
+                        "Measure physical land area vs. document area (Use Satellite Scout).",
+                        "Check for Nala / Water Body encroachment (FTL Buffer).",
+                        "Verify Access Road width (Minimum 30ft for layouts).",
+                        "If Farm Land: Ensure you are eligible (Pattadar Passbook).",
+                        "If Plot: Ask for LP Number (Layout Permission) or LRS."
+                      ].map((item, i) => (
+                        <li key={i} className="flex gap-2 items-start"><input type="checkbox" className="mt-1"/> <span>{item}</span></li>
+                      ))}
+                   </ul>
+                </section>
+
+                {/* 3. RED FLAGS */}
+                <section>
+                   <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><AlertTriangle size={18} className="text-red-600"/> Why Banks Reject Loans (Red Flags)</h3>
+                   <div className="space-y-3">
+                      <div className="flex gap-3 items-start">
+                         <div className="bg-red-100 p-2 rounded text-red-600 font-bold text-xs shrink-0">FTL / 111</div>
+                         <div>
+                            <div className="font-bold text-sm">Full Tank Level / GO 111</div>
+                            <p className="text-xs text-gray-500">Lands inside the buffer zone of lakes (Osman Sagar/Himayat Sagar) or Nalas are mostly prohibited for construction. Zero loan eligibility.</p>
+                         </div>
+                      </div>
+                      <div className="flex gap-3 items-start">
+                         <div className="bg-red-100 p-2 rounded text-red-600 font-bold text-xs shrink-0">Inam / Wakf</div>
+                         <div>
+                            <div className="font-bold text-sm">Inam or Wakf Board Lands</div>
+                            <p className="text-xs text-gray-500">Religious or Service Inam lands often have complex ownership disputes. Banks avoid these without specific NOCs.</p>
+                         </div>
+                      </div>
+                   </div>
+                </section>
+             </div>
+             
+             <div className="p-4 bg-gray-100 text-center text-xs text-gray-500">
+                Content is for educational purposes. Always consult a legal expert.
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* MAP WRAPPER */}
       <div className="flex flex-1 relative h-[85vh]">
@@ -443,13 +450,11 @@ const RealEstateSearchApp = () => {
               </div>
               <div className="p-4 space-y-4">
                  <button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded-lg text-xs font-bold border border-blue-200 hover:bg-blue-100 flex items-center justify-center gap-2 mb-2"><Zap size={14}/> Simplify (Cleanup)</button>
-                 
                  <div className="border rounded-lg overflow-hidden">
                     <button onClick={() => setShowPointList(!showPointList)} className="w-full flex justify-between items-center p-2 bg-gray-100 text-xs font-bold text-gray-600 hover:bg-gray-200">
                        <span>{measurePoints.length} Coordinates</span>
                        {showPointList ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
                     </button>
-                    
                     {showPointList && (
                        <div className="max-h-60 overflow-y-auto p-2 bg-gray-50">
                          {measurePoints.map((pt, i) => (
@@ -466,10 +471,7 @@ const RealEstateSearchApp = () => {
                  </div>
               </div>
               <div className="p-4 border-t mt-auto sticky bottom-0 bg-white">
-                 <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-500 text-xs">Total Area</span>
-                    <span className="font-bold text-orange-600 text-lg">{formatArea(tempArea)}</span>
-                 </div>
+                 <div className="flex justify-between items-center mb-2"><span className="text-gray-500 text-xs">Total Area</span><span className="font-bold text-orange-600 text-lg">{formatArea(tempArea)}</span></div>
                  <button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold disabled:opacity-50 hover:bg-green-700">{editingLead ? 'Update Shape' : 'Save Shape'}</button>
               </div>
            </div>
@@ -511,9 +513,7 @@ const RealEstateSearchApp = () => {
       {showSaveForm && (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[2000] flex justify-center items-center p-4">
           <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl">
-            <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-              <Save className="text-green-600"/> {editingLead ? 'Update Lead' : 'Save This Land'}
-            </h2>
+            <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Save className="text-green-600"/> {editingLead ? 'Update Lead' : 'Save This Land'}</h2>
             <form onSubmit={handleSaveShape} className="space-y-4">
               <div className="bg-orange-50 p-3 rounded text-center border border-orange-100"><span className="text-xs text-gray-500 uppercase font-bold">Calculated Area</span><div className="text-2xl font-bold text-orange-600">{formatArea(tempArea)}</div></div>
               <div><label className="block text-sm font-medium mb-1">Label / Name</label><input name="label" defaultValue={editingLead?.label} required autoFocus className="w-full border p-2 rounded outline-none focus:ring-2 ring-blue-500" placeholder="e.g. Reddy Farm" /></div>
