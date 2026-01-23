@@ -34,12 +34,12 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// --- DATABASE: GROWTH NODES (Added RRR Junctions) ---
+// --- DATABASE: GROWTH NODES (Removed Ibrahimpatnam) ---
 const GROWTH_NODES = [
   { name: "Bharat Future City (Fourth City)", lat: 16.9850, lng: 78.6500, type: "Mega Project" },
   { name: "Amazon Data Center (Meerkhanpet)", lat: 17.0600, lng: 78.6300, type: "IT Hub" },
   { name: "RRR (Shadnagar Crossing)", lat: 17.0350, lng: 78.2100, type: "Transport" },
-  { name: "RRR (Ibrahimpatnam Crossing)", lat: 17.1850, lng: 78.6400, type: "Transport" },
+  // Removed Ibrahimpatnam Crossing to keep focus broad
   { name: "RGIA Airport", lat: 17.2403, lng: 78.4294, type: "Transport" },
   { name: "Mucherla Pharma Cluster", lat: 16.9500, lng: 78.6100, type: "Industrial" },
   { name: "TCS Adibatla", lat: 17.2100, lng: 78.5300, type: "IT Hub" }
@@ -344,7 +344,6 @@ const RealEstateSearchApp = () => {
         } else if (isRadarMode && isAdmin) {
           const { lat, lng } = e.latlng;
           const distances = GROWTH_NODES.map(node => ({ ...node, dist: calculateDistance(lat, lng, node.lat, node.lng) })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist));
-          // NEW: Add Radar results including 'pos' for Google Earth Link
           setRadarResults({ pos: e.latlng, nodes: distances.slice(0, 4) }); 
         } else { setShowToolsMenu(false); }
       },
@@ -438,7 +437,18 @@ const RealEstateSearchApp = () => {
       {showResources && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div><div className="space-y-6"><div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div><div><h3 className="font-bold mb-2">Checklist</h3><ul className="list-disc pl-5 text-sm space-y-1"><li>Check Link Docs (30 Yrs)</li><li>Check Encumbrance Certificate (Online & Manual)</li><li>Check Prohibited List (Sec 22A)</li><li>Verify FTL / Nala Buffer Zones</li></ul></div></div></div></div> )}
 
       <div className="flex flex-1 relative h-[85vh]">
-        {showCoordsPanel && isMeasuring && ( <div className="w-80 bg-white shadow-xl z-10 overflow-y-auto border-r border-gray-200 flex flex-col"><div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-sm">Measure Mode</h3><button onClick={() => setShowCoordsPanel(false)}><X size={16}/></button></div><div className="p-4"><button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded text-xs font-bold mb-2">Simplify Shape</button><div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div></div><div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Shape</button></div></div> )}
+        {showCoordsPanel && isMeasuring && ( 
+            <div className="w-80 bg-white shadow-xl z-10 overflow-y-auto border-r border-gray-200 flex flex-col">
+                <div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-sm">Measure Mode</h3><button onClick={() => setShowCoordsPanel(false)}><X size={16}/></button></div>
+                <div className="p-4">
+                    <button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded text-xs font-bold mb-2">Simplify Shape</button>
+                    {/* WIPE BUTTON ADDED HERE */}
+                    <button onClick={() => { setMeasurePoints([]); setTempArea(0); }} className="w-full bg-red-50 text-red-700 py-2 rounded text-xs font-bold mb-2 flex items-center justify-center gap-2"><Trash2 size={14}/> Wipe Shape</button>
+                    <div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div>
+                </div>
+                <div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Shape</button></div>
+            </div> 
+        )}
 
         <div id="map-print-container" className="flex-1 relative bg-gray-200">
           <MapContainer center={centerPos} zoom={13} maxZoom={22} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }} ref={mapRef} preferCanvas={true}>
