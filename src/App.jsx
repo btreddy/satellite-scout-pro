@@ -141,21 +141,22 @@ const RealEstateSearchApp = () => {
   }, [searchQuery, leads]);
 
   const handleExternalSearch = async () => {
-    // 1. Try Coordinates (RegEx)
+    // 1. Try Coordinates (RegEx) - The most accurate method
     const coordRegex = /(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/;
     const match = searchQuery.match(coordRegex);
 
     if (match) {
         const lat = parseFloat(match[1]);
         const lng = parseFloat(match[2]);
-        setCenterPos({ lat, lng }); // Move the Radar Pin here
+        setCenterPos({ lat, lng });
         setSearchQuery(''); 
         return;
     } 
     
-    // 2. Try Google Short Links
-    if (searchQuery.includes("goo.gl") || searchQuery.includes("maps.app")) {
-        alert("⚠️ Short Link Detected!\n\n1. Click the link to open it.\n2. Copy the LONG URL from the address bar.\n3. Paste that here.");
+    // 2. Trap "Redirect Links" (Short links, WhatsApp links, GoogleUserContent)
+    // These cannot be read by code directly due to browser security.
+    if (searchQuery.includes("goo.gl") || searchQuery.includes("maps.app") || searchQuery.includes("googleusercontent")) {
+        alert("⚠️ Redirect Link Detected!\n\nThis link is encrypted/shortened.\n\n1. Click the link to open it in a new tab.\n2. Copy the LONG URL (or Coordinates) from the address bar.\n3. Paste that here.");
         return;
     }
 
@@ -167,7 +168,7 @@ const RealEstateSearchApp = () => {
         if(data && data.length > 0) {
             const lat = parseFloat(data[0].lat);
             const lng = parseFloat(data[0].lon);
-            setCenterPos({ lat, lng }); // Move the Radar Pin here
+            setCenterPos({ lat, lng });
             setSearchQuery('');
         } else {
              alert("Address not found. Try entering 'Village, City' or Coordinates.");
