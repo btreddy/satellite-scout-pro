@@ -13,8 +13,8 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
-const APP_PIN = "4838"; 
-const ADMIN_PHONE = "917013007595"; // <--- CHANGE THIS TO YOUR WHATSAPP NO (Format: 91XXXXXXXXXX)
+const APP_PIN = "1234"; 
+const ADMIN_PHONE = "910000000000"; // <--- CHANGE THIS TO YOUR WHATSAPP NO (Format: 91XXXXXXXXXX)
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -119,8 +119,7 @@ const RealEstateSearchApp = () => {
   const [showResources, setShowResources] = useState(false); 
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [centerPos, setCenterPos] = useState({ lat: 17.1350, lng: 78.4300 }); 
-  const [tempSearchMarker, setTempSearchMarker] = useState(null);
-
+  
   const dragStartPos = useRef(null);
   const fileInputRef = useRef(null);
   const mapRef = useRef(null); 
@@ -141,21 +140,40 @@ const RealEstateSearchApp = () => {
     }
   }, [searchQuery, leads]);
 
-  const handleExternalSearch = () => {
+  const handleExternalSearch = async () => {
+    // 1. Try Coordinates (RegEx)
     const coordRegex = /(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/;
     const match = searchQuery.match(coordRegex);
 
     if (match) {
         const lat = parseFloat(match[1]);
         const lng = parseFloat(match[2]);
-        setCenterPos({ lat, lng });
-        setTempSearchMarker({ lat, lng });
+        setCenterPos({ lat, lng }); // Move the Radar Pin here
         setSearchQuery(''); 
-        alert(`Flying to ${lat}, ${lng}`);
-    } else if (searchQuery.includes("goo.gl") || searchQuery.includes("maps.app")) {
+        return;
+    } 
+    
+    // 2. Try Google Short Links
+    if (searchQuery.includes("goo.gl") || searchQuery.includes("maps.app")) {
         alert("⚠️ Short Link Detected!\n\n1. Click the link to open it.\n2. Copy the LONG URL from the address bar.\n3. Paste that here.");
-    } else {
-        alert("No coordinates found. Paste 'Lat,Lng' or a full Google Maps link.");
+        return;
+    }
+
+    // 3. Try Address Search (Nominatim API)
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+        const data = await response.json();
+        
+        if(data && data.length > 0) {
+            const lat = parseFloat(data[0].lat);
+            const lng = parseFloat(data[0].lon);
+            setCenterPos({ lat, lng }); // Move the Radar Pin here
+            setSearchQuery('');
+        } else {
+             alert("Address not found. Try entering 'Village, City' or Coordinates.");
+        }
+    } catch(err) {
+        alert("Search failed. Please check internet.");
     }
   };
 
@@ -394,10 +412,17 @@ const RealEstateSearchApp = () => {
         <div className="flex-1 max-w-md mx-4 relative">
           <div className="flex items-center bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200">
             <Search size={18} className="text-gray-500 mr-2"/>
-            <input type="text" placeholder="Search saved... or Paste Link/Coords" className="bg-transparent border-none outline-none text-sm w-full" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <input type="text" placeholder="Search Address, Saved Leads, or Coords..." className="bg-transparent border-none outline-none text-sm w-full" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            
+            {/* Show GO button if there is text */}
+            {searchQuery && !searchQuery.includes('http') && filteredLeads.length === 0 && (
+                <button onClick={handleExternalSearch} className="bg-blue-600 text-white p-1 rounded-md ml-2 hover:bg-blue-700 flex items-center gap-1 text-xs px-2 font-bold animate-pulse">GO <ArrowRight size={12}/></button>
+            )}
+
             {(searchQuery.includes('http') || searchQuery.includes(',') || searchQuery.match(/\d/)) && (
                 <button onClick={handleExternalSearch} className="bg-blue-600 text-white p-1 rounded-md ml-2 hover:bg-blue-700 flex items-center gap-1 text-xs px-2 font-bold animate-pulse">GO <ArrowRight size={12}/></button>
             )}
+            
             {searchQuery && !searchQuery.includes('http') && <button onClick={() => setSearchQuery('')}><X size={14} className="text-gray-400"/></button>}
           </div>
           {searchQuery && filteredLeads.length > 0 && !searchQuery.includes('http') && !searchQuery.match(/\d{2}\./) && (
@@ -437,7 +462,8 @@ const RealEstateSearchApp = () => {
                 <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 z-[5001]">
                    <div className="text-[10px] font-bold text-gray-400 uppercase px-2 mb-1">External Apps</div>
                    <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><ExternalLink size={14}/> Open Google Earth</button>
-                   <button onClick={() => { window.open("https://bhuvan-app1.nrsc.gov.in/bhuvan2d/bhuvan/bhuvan2d.php", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><Globe size={14}/> Open Bhuvan (2D)</button>
+                   {/* NEW BHUVAN NG LINK (DYNAMIC) */}
+                   <button onClick={() => { window.open(`https://bhuvan.nrsc.gov.in/ngmaps#17/${centerPos.lat}/${centerPos.lng}`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><Globe size={14}/> Open Bhuvan NG (New)</button>
                    <button onClick={() => { window.open("https://bhubharati.telangana.gov.in/knowLandStatus", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><div className="w-4 flex justify-center text-[10px] font-bold">B</div> Open Bhubharati</button>
                    <div className="h-px bg-gray-100 my-1"></div>
                    <button onClick={() => { navigator.clipboard.writeText(`${centerPos.lat}, ${centerPos.lng}`); alert('Copied!'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><Copy size={14}/> Copy Coords</button>
@@ -477,8 +503,7 @@ const RealEstateSearchApp = () => {
             })}
             
             {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
-            {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Location<br/>{tempSearchMarker.lat.toFixed(4)}, {tempSearchMarker.lng.toFixed(4)}</Popup></Marker>}
-
+            
             {/* RADAR POPUP (Simplified) */}
             {radarResults && ( 
                <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
