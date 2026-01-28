@@ -14,7 +14,7 @@ import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
 const APP_PIN = "1234"; 
-const ADMIN_PHONE = "910000000000"; // <--- CHANGE THIS TO YOUR WHATSAPP NO (Format: 91XXXXXXXXXX)
+const ADMIN_PHONE = "910000000000"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -54,6 +54,26 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
             Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return (R * c).toFixed(1);
+};
+
+// Precise distance in Meters for Dimensions
+const getDistanceMeters = (p1, p2) => {
+  const R = 6371e3; // metres
+  const φ1 = p1.lat * Math.PI/180;
+  const φ2 = p2.lat * Math.PI/180;
+  const Δφ = (p2.lat-p1.lat) * Math.PI/180;
+  const Δλ = (p2.lng-p1.lng) * Math.PI/180;
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+
+// Bearing for Angles
+const getBearing = (p1, p2) => {
+  const y = Math.sin(p2.lng*Math.PI/180 - p1.lng*Math.PI/180) * Math.cos(p2.lat*Math.PI/180);
+  const x = Math.cos(p1.lat*Math.PI/180)*Math.sin(p2.lat*Math.PI/180) - Math.sin(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.cos(p2.lng*Math.PI/180 - p1.lng*Math.PI/180);
+  const θ = Math.atan2(y, x);
+  return (θ*180/Math.PI + 360) % 360; 
 };
 
 const calculateAcres = (latLngs) => {
@@ -119,7 +139,8 @@ const RealEstateSearchApp = () => {
   const [showResources, setShowResources] = useState(false); 
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [centerPos, setCenterPos] = useState({ lat: 17.1350, lng: 78.4300 }); 
-  
+  const [tempSearchMarker, setTempSearchMarker] = useState(null); 
+
   const dragStartPos = useRef(null);
   const fileInputRef = useRef(null);
   const mapRef = useRef(null); 
@@ -141,7 +162,6 @@ const RealEstateSearchApp = () => {
   }, [searchQuery, leads]);
 
   const handleExternalSearch = async () => {
-    // 1. Try Coordinates (RegEx) - The most accurate method
     const coordRegex = /(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/;
     const match = searchQuery.match(coordRegex);
 
@@ -149,18 +169,16 @@ const RealEstateSearchApp = () => {
         const lat = parseFloat(match[1]);
         const lng = parseFloat(match[2]);
         setCenterPos({ lat, lng });
+        setTempSearchMarker({ lat, lng });
         setSearchQuery(''); 
         return;
     } 
     
-    // 2. Trap "Redirect Links" (Short links, WhatsApp links, GoogleUserContent)
-    // These cannot be read by code directly due to browser security.
     if (searchQuery.includes("goo.gl") || searchQuery.includes("maps.app") || searchQuery.includes("googleusercontent")) {
         alert("⚠️ Redirect Link Detected!\n\nThis link is encrypted/shortened.\n\n1. Click the link to open it in a new tab.\n2. Copy the LONG URL (or Coordinates) from the address bar.\n3. Paste that here.");
         return;
     }
 
-    // 3. Try Address Search (Nominatim API)
     try {
         const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
         const data = await response.json();
@@ -169,6 +187,7 @@ const RealEstateSearchApp = () => {
             const lat = parseFloat(data[0].lat);
             const lng = parseFloat(data[0].lon);
             setCenterPos({ lat, lng });
+            setTempSearchMarker({ lat, lng });
             setSearchQuery('');
         } else {
              alert("Address not found. Try entering 'Village, City' or Coordinates.");
@@ -236,9 +255,19 @@ const RealEstateSearchApp = () => {
         doc.text(`Label: ${editingLead.label}`, 10, y); y+=6;
         doc.text(`Survey No: ${editingLead.survey_no || 'N/A'}`, 10, y); y+=6;
         doc.text(`Area: ${formatArea(editingLead.acres)}`, 10, y); y+=10;
+        // Add coordinates to PDF
+        editingLead.points.forEach((pt, i) => {
+            if(y > 270) { doc.addPage(); y = 20; }
+            doc.text(`Pt ${i+1}: ${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)}`, 10, y); y+=5;
+        });
     } else if (hasActiveDrawing) {
         doc.text(`Label: Preliminary Survey (Unsaved)`, 10, y); y+=6;
         doc.text(`Area: ${formatArea(tempArea)}`, 10, y); y+=10;
+        // Add coordinates to PDF
+        measurePoints.forEach((pt, i) => {
+            if(y > 270) { doc.addPage(); y = 20; }
+            doc.text(`Pt ${i+1}: ${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)}`, 10, y); y+=5;
+        });
     }
 
     if(radarResults) {
@@ -367,10 +396,7 @@ const RealEstateSearchApp = () => {
           const newPoints = [...measurePoints, e.latlng]; setMeasurePoints(newPoints); setRedoStack([]); setTempArea(calculateAcres(newPoints)); setShowCoordsPanel(true); setShowPointList(false);
         } else if (isRadarMode && isAdmin) {
           const { lat, lng } = e.latlng;
-          
-          // Calc Major Growth Nodes only
           const distances = GROWTH_NODES.map(node => ({ ...node, dist: calculateDistance(lat, lng, node.lat, node.lng) })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist));
-          
           setRadarResults({ pos: e.latlng, nodes: distances.slice(0, 4) }); 
         } else { setShowToolsMenu(false); }
       },
@@ -463,7 +489,6 @@ const RealEstateSearchApp = () => {
                 <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 z-[5001]">
                    <div className="text-[10px] font-bold text-gray-400 uppercase px-2 mb-1">External Apps</div>
                    <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><ExternalLink size={14}/> Open Google Earth</button>
-                   {/* NEW BHUVAN NG LINK (DYNAMIC) */}
                    <button onClick={() => { window.open(`https://bhuvan.nrsc.gov.in/ngmaps#17/${centerPos.lat}/${centerPos.lng}`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><Globe size={14}/> Open Bhuvan NG (New)</button>
                    <button onClick={() => { window.open("https://bhubharati.telangana.gov.in/knowLandStatus", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><div className="w-4 flex justify-center text-[10px] font-bold">B</div> Open Bhubharati</button>
                    <div className="h-px bg-gray-100 my-1"></div>
@@ -486,6 +511,20 @@ const RealEstateSearchApp = () => {
                     <button onClick={() => { setMeasurePoints([]); setTempArea(0); }} className="w-full bg-red-50 text-red-700 py-2 rounded text-xs font-bold mb-2 flex items-center justify-center gap-2"><Trash2 size={14}/> Wipe Shape</button>
                     <div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div>
                 </div>
+
+                {/* --- COORDINATES LIST (NEW FEATURE) --- */}
+                <div className="mt-4 px-4 border-t pt-2">
+                    <h4 className="font-bold text-xs text-gray-500 mb-2">Coordinates (Lat, Lng)</h4>
+                    <div className="space-y-1 max-h-40 overflow-y-auto text-xs pb-4">
+                        {measurePoints.map((pt, i) => (
+                        <div key={i} className="flex justify-between bg-gray-100 p-1.5 rounded">
+                            <span className="font-bold text-gray-600">Pt {i+1}</span>
+                            <span className="font-mono select-all">{pt.lat.toFixed(6)}, {pt.lng.toFixed(6)}</span>
+                        </div>
+                        ))}
+                    </div>
+                </div>
+
                 <div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Shape</button></div>
             </div> 
         )}
@@ -498,14 +537,68 @@ const RealEstateSearchApp = () => {
               <LayersControl.BaseLayer name="Google Streets"><TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" attribution='© Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
             </LayersControl>
             
+            {/* --- LABELS FOR DIMENSIONS (LENGTH) AND ANGLES --- */}
+            {measurePoints.map((pt, i) => {
+               // Next point for line
+               const nextPt = measurePoints[(i + 1) % measurePoints.length];
+               // Midpoint for Length Label
+               const midLat = (pt.lat + nextPt.lat) / 2;
+               const midLng = (pt.lng + nextPt.lng) / 2;
+               // Dist in Meters -> Feet
+               const distMeters = getDistanceMeters(pt, nextPt);
+               const distFeet = Math.round(distMeters * 3.28084);
+               
+               // Prev point for Angle
+               const prevPt = measurePoints[(i - 1 + measurePoints.length) % measurePoints.length];
+               // Bearing in/out
+               const bearingIn = getBearing(prevPt, pt);
+               const bearingOut = getBearing(pt, nextPt);
+               let angle = (bearingOut - bearingIn + 360) % 360;
+               if (angle > 180) angle = 360 - angle; // Interior angle approximation
+               
+               // Only show if we have > 2 points (a shape) and lines exist
+               if (measurePoints.length < 2) return null;
+
+               return (
+                 <React.Fragment key={i}>
+                    {/* Line Length Label (Always show for segments) */}
+                    {i < measurePoints.length - 1 || measurePoints.length > 2 ? (
+                        <Marker 
+                           position={[midLat, midLng]} 
+                           icon={L.divIcon({ 
+                              className: 'text-label', 
+                              html: `<div style="background:none; color: white; text-shadow: 1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black; font-size: 10px; font-weight: bold; white-space: nowrap;">${distFeet} ft</div>`, 
+                              iconSize: [40, 10], 
+                              iconAnchor: [20, 5] 
+                           })} 
+                        />
+                    ) : null}
+                    
+                    {/* Angle Label at Vertex (Only if > 2 points) */}
+                    {measurePoints.length > 2 && (
+                       <Marker 
+                          position={pt} 
+                          icon={L.divIcon({ 
+                             className: 'angle-label', 
+                             html: `<div style="background:none; color: yellow; text-shadow: 1px 1px 2px black; font-size: 9px; font-weight: bold;">${Math.round(angle)}°</div>`, 
+                             iconSize: [20, 10], 
+                             iconAnchor: [10, -10] 
+                          })} 
+                       />
+                    )}
+                 </React.Fragment>
+               );
+            })}
+            
             {filteredLeads.map((lead) => {
                if(editingLead && editingLead.id === lead.id) return null;
                return <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }} eventHandlers={{ click: () => { if(isAdmin) handleEditShape(lead); } }}><Popup>{lead.label} ({formatArea(lead.acres)})</Popup></Polygon>;
             })}
             
             {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
-            
-            {/* RADAR POPUP (Simplified) */}
+            {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Location<br/>{tempSearchMarker.lat.toFixed(4)}, {tempSearchMarker.lng.toFixed(4)}</Popup></Marker>}
+
+            {/* RADAR POPUP WITH LOCAL INTEL */}
             {radarResults && ( 
                <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
                   <div className="min-w-[220px]">
@@ -518,10 +611,8 @@ const RealEstateSearchApp = () => {
                      <div className="mt-2 text-center">
                         <button onClick={() => window.open(`https://earth.google.com/web/@${radarResults.pos.lat},${radarResults.pos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank')} className="text-[10px] text-blue-600 underline flex items-center justify-center gap-1"><ExternalLink size={10}/> Open in Earth (History)</button>
                      </div>
-                     
-                     {/* CONTACT ADMIN FOR REPORT */}
-                     <div className="mt-3 pt-2 bg-blue-50 p-2 rounded border border-blue-200 text-center cursor-pointer hover:bg-blue-100" onClick={handleWhatsApp}>
-                        <div className="text-xs font-bold text-blue-800 flex items-center justify-center gap-1"><Phone size={12}/> Price & Ground Report</div>
+                     <div className="mt-3 pt-2 bg-blue-50 p-2 rounded border border-blue-200 text-center">
+                        <div className="text-xs font-bold text-blue-800 flex items-center justify-center gap-1"><Phone size={12}/> For Price Quote</div>
                         <div className="font-bold text-gray-800 text-sm">Contact Admin</div>
                      </div>
                   </div>
