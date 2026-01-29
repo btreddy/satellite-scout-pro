@@ -4,7 +4,7 @@ import {
   X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, 
   Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, 
   ChevronUp, BookOpen, AlertTriangle, CheckCircle, Radar, FileText, 
-  Lock, Unlock, WifiOff, ArrowRight, Phone, Map, Info, MessageCircle, Share2, Link, Building2
+  Lock, Unlock, WifiOff, ArrowRight, Phone, Map, Info, MessageCircle, Share2, Link, Building2, UserPlus
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -14,7 +14,7 @@ import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
 const APP_PIN = "4838"; 
-const ADMIN_PHONE = "917013007595"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
+const ADMIN_PHONE = "9170130075"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -128,6 +128,9 @@ const RealEstateSearchApp = () => {
   const [projectBrochure, setProjectBrochure] = useState(null); 
   const [shareMode, setShareMode] = useState(false); 
   
+  // --- CONTACT NUMBER STATE (Default: Admin) ---
+  const [activeContactNumber, setActiveContactNumber] = useState(ADMIN_PHONE);
+
   const [isAdmin, setIsAdmin] = useState(false); 
   const [showLogin, setShowLogin] = useState(false);
   const [usingOfflineMode, setUsingOfflineMode] = useState(false);
@@ -217,6 +220,12 @@ const RealEstateSearchApp = () => {
 
     const params = new URLSearchParams(window.location.search);
     const sharedId = params.get('id');
+    const agentPhone = params.get('agent');
+
+    // --- AGENT LINK DETECTED? ---
+    if(agentPhone) {
+        setActiveContactNumber(agentPhone); // Override Admin Phone
+    }
 
     if (sharedId) {
         const sharedProject = allLeads.find(l => l.id.toString() === sharedId);
@@ -242,7 +251,7 @@ const RealEstateSearchApp = () => {
   };
 
   const handleWhatsApp = () => {
-    window.open(`https://wa.me/${ADMIN_PHONE}?text=Hello, I want a ground report for a land.`, '_blank');
+    window.open(`https://wa.me/${activeContactNumber}?text=Hello, I want a ground report for a land.`, '_blank');
   };
 
   const handleShowBrochure = (lead) => {
@@ -250,10 +259,19 @@ const RealEstateSearchApp = () => {
     setCenterPos(lead.center);
   };
 
+  // --- MODIFIED SHARE LOGIC FOR AGENTS ---
   const handleCopyLink = (id) => {
-      const url = `${window.location.origin}/?id=${id}`;
+      const agentNum = prompt("📢 Create Agent Link?\n\nEnter Agent's WhatsApp Number below (e.g. 919900...)\n\nLeave empty to create a Standard Link.", "");
+      
+      let url = `${window.location.origin}/?id=${id}`;
+      if(agentNum && agentNum.trim() !== "") {
+          url += `&agent=${agentNum.trim()}`;
+          alert(`✅ Agent Link Created!\n\nCalls from this link will go to: ${agentNum}\n\nLink copied to clipboard.`);
+      } else {
+          alert(`✅ Standard Link Created!\n\nCalls will go to YOU (Admin).\n\nLink copied to clipboard.`);
+      }
+      
       navigator.clipboard.writeText(url);
-      alert("Link Copied! Send this to the developer/client.\n\nThey will see ONLY this project.");
   };
 
   // --- PDF REPORT ---
@@ -555,8 +573,8 @@ const RealEstateSearchApp = () => {
                             <div className="text-xs text-gray-400 font-bold uppercase mb-1">Total Area</div>
                             <div className="text-xl font-bold text-slate-800">{formatArea(projectBrochure.acres)}</div>
                         </div>
-                         {/* BIG ENQUIRE BUTTON */}
-                        <button onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=I am interested in ${projectBrochure.label}`, '_blank')} className="bg-green-600 text-white rounded-xl flex flex-col items-center justify-center p-2 font-bold hover:bg-green-700 transition-colors shadow-lg shadow-green-200">
+                         {/* BIG ENQUIRE BUTTON - Uses Dynamic Contact Number */}
+                        <button onClick={() => window.open(`https://wa.me/${activeContactNumber}?text=I am interested in ${projectBrochure.label}`, '_blank')} className="bg-green-600 text-white rounded-xl flex flex-col items-center justify-center p-2 font-bold hover:bg-green-700 transition-colors shadow-lg shadow-green-200">
                             <MessageCircle size={24} className="mb-1"/>
                             <span>Enquire Now</span>
                         </button>
@@ -588,7 +606,7 @@ const RealEstateSearchApp = () => {
             <Info size={20}/> Project Info
           </button>
           <button
-            onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=I am interested in ${filteredLeads[0].label}`, '_blank')}
+            onClick={() => window.open(`https://wa.me/${activeContactNumber}?text=I am interested in ${filteredLeads[0].label}`, '_blank')}
             className="bg-green-600 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-green-700 animate-pulse"
           >
             <MessageCircle size={20}/> Enquire
@@ -666,6 +684,8 @@ const RealEstateSearchApp = () => {
                             <div className="text-xs text-gray-500 mb-2">{formatArea(lead.acres)}</div>
                             <div className="flex gap-2 justify-center">
                                 <button onClick={() => handleShowBrochure(lead)} className="bg-blue-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1"><Info size={12}/> Brochure</button>
+                                
+                                {/* SHARE BUTTON WITH AGENT LOGIC */}
                                 <button onClick={() => handleCopyLink(lead.id)} className="bg-gray-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1"><Link size={12}/> Share</button>
                             </div>
                         </div>
