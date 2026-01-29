@@ -4,7 +4,7 @@ import {
   X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, 
   Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, 
   ChevronUp, BookOpen, AlertTriangle, CheckCircle, Radar, FileText, 
-  Lock, Unlock, WifiOff, ArrowRight, Phone, Map, Info, MessageCircle, Share2, Link
+  Lock, Unlock, WifiOff, ArrowRight, Phone, Map, Info, MessageCircle, Share2, Link, Building2
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -126,7 +126,7 @@ const RealEstateSearchApp = () => {
   const [isRadarMode, setIsRadarMode] = useState(false);
   const [radarResults, setRadarResults] = useState(null);
   const [projectBrochure, setProjectBrochure] = useState(null); 
-  const [shareMode, setShareMode] = useState(false); // TRUE if user is viewing a shared link
+  const [shareMode, setShareMode] = useState(false); 
   
   const [isAdmin, setIsAdmin] = useState(false); 
   const [showLogin, setShowLogin] = useState(false);
@@ -149,7 +149,6 @@ const RealEstateSearchApp = () => {
   // --- UNIVERSAL SEARCH LOGIC ---
   useEffect(() => {
     if (!searchQuery) { 
-      // If in Share Mode, do NOT reset to show all leads. Keep the single lead.
       if (!shareMode) setFilteredLeads(leads); 
     } else {
       const lowerQ = searchQuery.toLowerCase();
@@ -216,18 +215,16 @@ const RealEstateSearchApp = () => {
     allLeads.sort((a,b) => (b.id || 0) - (a.id || 0));
     setLeads(allLeads);
 
-    // --- CHECK FOR SHARE LINK (DEEP LINKING) ---
     const params = new URLSearchParams(window.location.search);
     const sharedId = params.get('id');
 
     if (sharedId) {
-        // FILTER TO ONLY THE SHARED PROJECT
         const sharedProject = allLeads.find(l => l.id.toString() === sharedId);
         if (sharedProject) {
-            setFilteredLeads([sharedProject]); // Only show this one
+            setFilteredLeads([sharedProject]); 
             setCenterPos(sharedProject.center);
-            setProjectBrochure(sharedProject); // Auto-open brochure
-            setShareMode(true); // Lock search/view
+            setProjectBrochure(sharedProject); 
+            setShareMode(true); 
         } else {
             alert("Project not found or invalid link.");
             setFilteredLeads(allLeads);
@@ -531,31 +528,49 @@ const RealEstateSearchApp = () => {
       {/* --- BROCHURE VIEW (Auto Opens for Share Links) --- */}
       {projectBrochure && (
         <div className="fixed inset-0 bg-white z-[6000] flex flex-col md:flex-row overflow-hidden">
-            <div className="w-full md:w-1/3 p-6 bg-slate-50 border-r border-gray-200 overflow-y-auto relative">
-                <button onClick={() => setProjectBrochure(null)} className="absolute top-4 right-4 bg-gray-200 p-2 rounded-full hover:bg-gray-300"><X size={20}/></button>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">{projectBrochure.label}</h1>
-                <div className="text-sm font-bold text-blue-600 mb-4 flex items-center gap-2"><Map size={14}/> {projectBrochure.survey_no || "Location Not Specified"}</div>
-                
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6">
-                    <h3 className="font-bold text-gray-500 text-xs uppercase mb-2">Project Highlights</h3>
-                    <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                        {projectBrochure.note || "No details added yet."}
-                    </div>
+            <div className="w-full md:w-1/3 bg-slate-50 border-r border-gray-200 overflow-y-auto relative flex flex-col">
+                {/* --- HEADER (BRANDING) --- */}
+                <div className="bg-slate-900 p-6 text-white relative">
+                   <button onClick={() => setProjectBrochure(null)} className="absolute top-4 right-4 bg-white/20 p-2 rounded-full hover:bg-white/30 text-white"><X size={20}/></button>
+                   <div className="flex items-center gap-3 mb-2">
+                      <div className="bg-blue-600 p-2 rounded-lg"><Building2 size={24} className="text-white"/></div>
+                      <span className="text-xs font-bold uppercase tracking-widest text-blue-300">Premium Project</span>
+                   </div>
+                   <h1 className="text-2xl font-bold leading-tight">{projectBrochure.label}</h1>
+                   <div className="flex items-center gap-2 mt-2 text-slate-300 text-sm">
+                      <Map size={14}/> <span>{projectBrochure.survey_no || "Location Not Specified"}</span>
+                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div className="bg-orange-50 p-3 rounded-lg text-center border border-orange-100">
-                        <div className="text-xs text-gray-500 font-bold">Total Area</div>
-                        <div className="text-lg font-bold text-orange-600">{formatArea(projectBrochure.acres)}</div>
+                <div className="p-6 flex-1">
+                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-6">
+                        <h3 className="font-bold text-gray-400 text-xs uppercase mb-3 flex items-center gap-2"><Zap size={12}/> Project Highlights</h3>
+                        <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                            {projectBrochure.note || "No details added yet."}
+                        </div>
                     </div>
-                    <button onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=I am interested in ${projectBrochure.label}`, '_blank')} className="bg-green-600 text-white rounded-lg flex items-center justify-center gap-2 font-bold hover:bg-green-700 transition-colors">
-                        <MessageCircle size={18}/> Enquire
-                    </button>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                            <div className="text-xs text-gray-400 font-bold uppercase mb-1">Total Area</div>
+                            <div className="text-xl font-bold text-slate-800">{formatArea(projectBrochure.acres)}</div>
+                        </div>
+                         {/* BIG ENQUIRE BUTTON */}
+                        <button onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=I am interested in ${projectBrochure.label}`, '_blank')} className="bg-green-600 text-white rounded-xl flex flex-col items-center justify-center p-2 font-bold hover:bg-green-700 transition-colors shadow-lg shadow-green-200">
+                            <MessageCircle size={24} className="mb-1"/>
+                            <span>Enquire Now</span>
+                        </button>
+                    </div>
+                </div>
+                
+                {/* Footer Quote */}
+                <div className="p-4 text-center text-[10px] text-gray-400 border-t">
+                   Powered by Satellite Scout Pro
                 </div>
             </div>
+
             <div className="flex-1 relative bg-gray-100">
                 <button onClick={() => setProjectBrochure(null)} className="absolute top-4 right-4 bg-white p-2 rounded-lg shadow z-[7000] md:hidden font-bold text-xs">Close Brochure</button>
-                {/* We re-use the map container in background, or we could mount a static one. For simplicity, we just overlay this div on top of the main UI, but we let the user "Close" it to see the map. */}
                 <div className="absolute inset-0 flex items-center justify-center text-gray-400">
                     (Map View hidden in Brochure Mode - Click Close to explore Map)
                 </div>
@@ -567,8 +582,8 @@ const RealEstateSearchApp = () => {
       {shareMode && !projectBrochure && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[5000] flex gap-4 bg-white p-2 rounded-full shadow-2xl border border-gray-200">
           <button
-            onClick={() => setProjectBrochure(filteredLeads[0])} // Re-open the single shared lead
-            className="bg-blue-600 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"
+            onClick={() => setProjectBrochure(filteredLeads[0])} 
+            className="bg-slate-800 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-slate-900 transition-transform hover:scale-105"
           >
             <Info size={20}/> Project Info
           </button>
