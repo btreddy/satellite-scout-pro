@@ -4,7 +4,7 @@ import {
   X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, 
   Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, 
   ChevronUp, BookOpen, AlertTriangle, CheckCircle, Radar, FileText, 
-  Lock, Unlock, WifiOff, ArrowRight, Phone, Map, Info, MessageCircle 
+  Lock, Unlock, WifiOff, ArrowRight, Phone, Map, Info, MessageCircle, Share2, Eye
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -13,8 +13,8 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
-const APP_PIN = "4838"; 
-const ADMIN_PHONE = "917013425183"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
+const APP_PIN = "1234"; 
+const ADMIN_PHONE = "910000000000"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -56,9 +56,8 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return (R * c).toFixed(1);
 };
 
-// Precise distance in Meters for Dimensions
 const getDistanceMeters = (p1, p2) => {
-  const R = 6371e3; // metres
+  const R = 6371e3; 
   const φ1 = p1.lat * Math.PI/180;
   const φ2 = p2.lat * Math.PI/180;
   const Δφ = (p2.lat-p1.lat) * Math.PI/180;
@@ -68,7 +67,6 @@ const getDistanceMeters = (p1, p2) => {
   return R * c;
 };
 
-// Bearing for Angles
 const getBearing = (p1, p2) => {
   const y = Math.sin(p2.lng*Math.PI/180 - p1.lng*Math.PI/180) * Math.cos(p2.lat*Math.PI/180);
   const x = Math.cos(p1.lat*Math.PI/180)*Math.sin(p2.lat*Math.PI/180) - Math.sin(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.cos(p2.lng*Math.PI/180 - p1.lng*Math.PI/180);
@@ -103,7 +101,6 @@ const formatArea = (acresVal) => {
   return `${ac.toFixed(2)} Ac`;
 };
 
-// --- MAP CONTROLLER ---
 const MapController = ({ center }) => {
   const map = useMap();
   useEffect(() => { 
@@ -128,6 +125,7 @@ const RealEstateSearchApp = () => {
 
   const [isRadarMode, setIsRadarMode] = useState(false);
   const [radarResults, setRadarResults] = useState(null);
+  const [projectBrochure, setProjectBrochure] = useState(null); // New state for Brochure View
   
   const [isAdmin, setIsAdmin] = useState(false); 
   const [showLogin, setShowLogin] = useState(false);
@@ -147,7 +145,7 @@ const RealEstateSearchApp = () => {
 
   useEffect(() => { fetchLeads(); }, []);
 
-  // --- UNIVERSAL SEARCH LOGIC ---
+  // --- SEARCH LOGIC ---
   useEffect(() => {
     if (!searchQuery) { 
       setFilteredLeads(leads); 
@@ -228,6 +226,11 @@ const RealEstateSearchApp = () => {
     window.open(`https://wa.me/${ADMIN_PHONE}?text=Hello, I want a ground report for a land.`, '_blank');
   };
 
+  const handleShowBrochure = (lead) => {
+    setProjectBrochure(lead);
+    setCenterPos(lead.center);
+  };
+
   // --- PDF REPORT ---
   const handleGeneratePDF = async () => {
     const hasActiveDrawing = measurePoints.length > 2;
@@ -243,7 +246,6 @@ const RealEstateSearchApp = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16);
     doc.text("Satellite Scout - Investment Insight", 10, 13);
-    
     doc.addImage(imgData, 'PNG', 10, 25, 190, 100);
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(14);
@@ -251,23 +253,20 @@ const RealEstateSearchApp = () => {
     doc.setFontSize(10);
     let y = 145;
     
-    if(editingLead) {
-        doc.text(`Label: ${editingLead.label}`, 10, y); y+=6;
-        doc.text(`Survey No: ${editingLead.survey_no || 'N/A'}`, 10, y); y+=6;
-        doc.text(`Area: ${formatArea(editingLead.acres)}`, 10, y); y+=10;
-        // Add coordinates to PDF
-        editingLead.points.forEach((pt, i) => {
-            if(y > 270) { doc.addPage(); y = 20; }
-            doc.text(`Pt ${i+1}: ${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)}`, 10, y); y+=5;
-        });
-    } else if (hasActiveDrawing) {
-        doc.text(`Label: Preliminary Survey (Unsaved)`, 10, y); y+=6;
-        doc.text(`Area: ${formatArea(tempArea)}`, 10, y); y+=10;
-        // Add coordinates to PDF
-        measurePoints.forEach((pt, i) => {
-            if(y > 270) { doc.addPage(); y = 20; }
-            doc.text(`Pt ${i+1}: ${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)}`, 10, y); y+=5;
-        });
+    const target = editingLead || { label: "Draft", survey_no: "N/A", acres: tempArea, note: "Unsaved Draft" };
+    doc.text(`Label: ${target.label}`, 10, y); y+=6;
+    doc.text(`Survey No: ${target.survey_no || 'N/A'}`, 10, y); y+=6;
+    doc.text(`Area: ${formatArea(target.acres)}`, 10, y); y+=10;
+    
+    if(target.note) {
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 150);
+        doc.text("Project Highlights / Notes:", 10, y); y+=6;
+        doc.setFontSize(10);
+        doc.setTextColor(0,0,0);
+        const splitNotes = doc.splitTextToSize(target.note, 190);
+        doc.text(splitNotes, 10, y);
+        y += (splitNotes.length * 5) + 10;
     }
 
     if(radarResults) {
@@ -278,7 +277,6 @@ const RealEstateSearchApp = () => {
         doc.setFontSize(10);
         radarResults.nodes.forEach(node => { doc.text(`${node.name}: ${node.dist} km`, 10, y); y+=6; });
         y+=4;
-        
         doc.setFontSize(11);
         doc.setTextColor(0, 100, 0);
         doc.text(`Price & Ground Report: Contact Admin`, 10, y);
@@ -300,7 +298,6 @@ const RealEstateSearchApp = () => {
     setMeasurePoints(lead.points); setTempArea(lead.acres); setEditingLead(lead); setCenterPos(lead.center); setIsMeasuring(true); setShowCoordsPanel(true); setShowPointList(false); setRedoStack([]);
   };
 
-  // --- IMPORT LOGIC ---
   const handleImport = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -355,6 +352,7 @@ const RealEstateSearchApp = () => {
   const handleSaveShape = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
+    // Updated to capture longer text for Project Highlights
     const leadData = { label: formData.get('label'), survey_no: formData.get('survey_no'), note: formData.get('note'), acres: tempArea, points: measurePoints, center: measurePoints[0] };
     const finalId = editingLead ? editingLead.id : Date.now();
     const finalLead = { ...leadData, id: finalId };
@@ -371,7 +369,7 @@ const RealEstateSearchApp = () => {
     saveToLocal(finalLead);
     if(editingLead) { setLeads(leads.map(l => l.id === finalId ? finalLead : l)); } else { setLeads([finalLead, ...leads]); }
     finishSave();
-    if(savedToCloud) alert("Saved to Cloud & Local Backup!"); else alert("Saved Locally (Offline Mode).");
+    if(savedToCloud) alert("Project Saved to Cloud!"); else alert("Project Saved Locally.");
   };
 
   const finishSave = () => { setMeasurePoints([]); setRedoStack([]); setIsMeasuring(false); setEditingLead(null); setShowSaveForm(false); setShowCoordsPanel(false); };
@@ -386,7 +384,6 @@ const RealEstateSearchApp = () => {
   };
 
   const updatePointPosition = (index, newLatLng) => { const u = [...measurePoints]; u[index] = newLatLng; setMeasurePoints(u); setTempArea(calculateAcres(u)); };
-  const handleCoordInput = (index, field, value) => { const u = [...measurePoints]; u[index] = { ...u[index], [field]: parseFloat(value) }; setMeasurePoints(u); setTempArea(calculateAcres(u)); };
   
   // --- MAP CLICK ---
   const MapClickHandler = () => {
@@ -502,6 +499,41 @@ const RealEstateSearchApp = () => {
       {showLogin && ( <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs"><h2 className="text-xl font-bold mb-4 text-center">Enter Access PIN</h2><form onSubmit={handleLogin} className="space-y-3"><input type="password" name="pin" className="w-full border p-2 rounded text-center text-2xl tracking-widest" autoFocus placeholder="****" /><div className="flex gap-2"><button type="button" onClick={() => setShowLogin(false)} className="flex-1 py-2 bg-gray-100 rounded">Cancel</button><button type="submit" className="flex-1 bg-black text-white py-2 rounded font-bold">Unlock</button></div></form></div></div> )}
       {showResources && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div><div className="space-y-6"><div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div><div><h3 className="font-bold mb-2">Checklist</h3><ul className="list-disc pl-5 text-sm space-y-1"><li>Check Link Docs (30 Yrs)</li><li>Check Encumbrance Certificate (Online & Manual)</li><li>Check Prohibited List (Sec 22A)</li><li>Verify FTL / Nala Buffer Zones</li></ul></div></div></div></div> )}
 
+      {/* --- BROCHURE VIEW (NEW FEATURE) --- */}
+      {projectBrochure && (
+        <div className="fixed inset-0 bg-white z-[6000] flex flex-col md:flex-row overflow-hidden">
+            <div className="w-full md:w-1/3 p-6 bg-slate-50 border-r border-gray-200 overflow-y-auto relative">
+                <button onClick={() => setProjectBrochure(null)} className="absolute top-4 right-4 bg-gray-200 p-2 rounded-full hover:bg-gray-300"><X size={20}/></button>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">{projectBrochure.label}</h1>
+                <div className="text-sm font-bold text-blue-600 mb-4 flex items-center gap-2"><Map size={14}/> {projectBrochure.survey_no || "Location Not Specified"}</div>
+                
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6">
+                    <h3 className="font-bold text-gray-500 text-xs uppercase mb-2">Project Highlights</h3>
+                    <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                        {projectBrochure.note || "No details added yet."}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="bg-orange-50 p-3 rounded-lg text-center border border-orange-100">
+                        <div className="text-xs text-gray-500 font-bold">Total Area</div>
+                        <div className="text-lg font-bold text-orange-600">{formatArea(projectBrochure.acres)}</div>
+                    </div>
+                    <button onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=I am interested in ${projectBrochure.label}`, '_blank')} className="bg-green-600 text-white rounded-lg flex items-center justify-center gap-2 font-bold hover:bg-green-700 transition-colors">
+                        <MessageCircle size={18}/> Enquire
+                    </button>
+                </div>
+            </div>
+            <div className="flex-1 relative bg-gray-100">
+                <button onClick={() => setProjectBrochure(null)} className="absolute top-4 right-4 bg-white p-2 rounded-lg shadow z-[7000] md:hidden font-bold text-xs">Close Brochure</button>
+                {/* We re-use the map container in background, or we could mount a static one. For simplicity, we just overlay this div on top of the main UI, but we let the user "Close" it to see the map. */}
+                <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                    (Map View hidden in Brochure Mode - Click Close to explore Map)
+                </div>
+            </div>
+        </div>
+      )}
+
       <div className="flex flex-1 relative h-[85vh]">
         {showCoordsPanel && isMeasuring && ( 
             <div className="w-80 bg-white shadow-xl z-10 overflow-y-auto border-r border-gray-200 flex flex-col">
@@ -512,7 +544,6 @@ const RealEstateSearchApp = () => {
                     <div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div>
                 </div>
 
-                {/* --- COORDINATES LIST (NEW FEATURE) --- */}
                 <div className="mt-4 px-4 border-t pt-2">
                     <h4 className="font-bold text-xs text-gray-500 mb-2">Coordinates (Lat, Lng)</h4>
                     <div className="space-y-1 max-h-40 overflow-y-auto text-xs pb-4">
@@ -525,7 +556,7 @@ const RealEstateSearchApp = () => {
                     </div>
                 </div>
 
-                <div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Shape</button></div>
+                <div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Project</button></div>
             </div> 
         )}
 
@@ -539,52 +570,25 @@ const RealEstateSearchApp = () => {
             
             {/* --- LABELS FOR DIMENSIONS (LENGTH) AND ANGLES --- */}
             {measurePoints.map((pt, i) => {
-               // Next point for line
                const nextPt = measurePoints[(i + 1) % measurePoints.length];
-               // Midpoint for Length Label
                const midLat = (pt.lat + nextPt.lat) / 2;
                const midLng = (pt.lng + nextPt.lng) / 2;
-               // Dist in Meters -> Feet
                const distMeters = getDistanceMeters(pt, nextPt);
                const distFeet = Math.round(distMeters * 3.28084);
-               
-               // Prev point for Angle
                const prevPt = measurePoints[(i - 1 + measurePoints.length) % measurePoints.length];
-               // Bearing in/out
                const bearingIn = getBearing(prevPt, pt);
                const bearingOut = getBearing(pt, nextPt);
                let angle = (bearingOut - bearingIn + 360) % 360;
-               if (angle > 180) angle = 360 - angle; // Interior angle approximation
-               
-               // Only show if we have > 2 points (a shape) and lines exist
+               if (angle > 180) angle = 360 - angle; 
                if (measurePoints.length < 2) return null;
 
                return (
                  <React.Fragment key={i}>
-                    {/* Line Length Label (Always show for segments) */}
                     {i < measurePoints.length - 1 || measurePoints.length > 2 ? (
-                        <Marker 
-                           position={[midLat, midLng]} 
-                           icon={L.divIcon({ 
-                              className: 'text-label', 
-                              html: `<div style="background:none; color: white; text-shadow: 1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black; font-size: 10px; font-weight: bold; white-space: nowrap;">${distFeet} ft</div>`, 
-                              iconSize: [40, 10], 
-                              iconAnchor: [20, 5] 
-                           })} 
-                        />
+                        <Marker position={[midLat, midLng]} icon={L.divIcon({ className: 'text-label', html: `<div style="background:none; color: white; text-shadow: 1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black; font-size: 10px; font-weight: bold; white-space: nowrap;">${distFeet} ft</div>`, iconSize: [40, 10], iconAnchor: [20, 5] })} />
                     ) : null}
-                    
-                    {/* Angle Label at Vertex (Only if > 2 points) */}
                     {measurePoints.length > 2 && (
-                       <Marker 
-                          position={pt} 
-                          icon={L.divIcon({ 
-                             className: 'angle-label', 
-                             html: `<div style="background:none; color: yellow; text-shadow: 1px 1px 2px black; font-size: 9px; font-weight: bold;">${Math.round(angle)}°</div>`, 
-                             iconSize: [20, 10], 
-                             iconAnchor: [10, -10] 
-                          })} 
-                       />
+                       <Marker position={pt} icon={L.divIcon({ className: 'angle-label', html: `<div style="background:none; color: yellow; text-shadow: 1px 1px 2px black; font-size: 9px; font-weight: bold;">${Math.round(angle)}°</div>`, iconSize: [20, 10], iconAnchor: [10, -10] })} />
                     )}
                  </React.Fragment>
                );
@@ -592,27 +596,34 @@ const RealEstateSearchApp = () => {
             
             {filteredLeads.map((lead) => {
                if(editingLead && editingLead.id === lead.id) return null;
-               return <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }} eventHandlers={{ click: () => { if(isAdmin) handleEditShape(lead); } }}><Popup>{lead.label} ({formatArea(lead.acres)})</Popup></Polygon>;
+               return (
+                 <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }} eventHandlers={{ click: () => { if(isAdmin) handleEditShape(lead); } }}>
+                    <Popup>
+                        <div className="text-center">
+                            <div className="font-bold text-sm mb-1">{lead.label}</div>
+                            <div className="text-xs text-gray-500 mb-2">{formatArea(lead.acres)}</div>
+                            <button onClick={() => handleShowBrochure(lead)} className="bg-blue-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1 mx-auto"><Info size={12}/> View Brochure</button>
+                        </div>
+                    </Popup>
+                 </Polygon>
+               );
             })}
             
             {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
             {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Location<br/>{tempSearchMarker.lat.toFixed(4)}, {tempSearchMarker.lng.toFixed(4)}</Popup></Marker>}
 
-            {/* RADAR POPUP WITH LOCAL INTEL */}
             {radarResults && ( 
                <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
                   <div className="min-w-[220px]">
                      <div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-center flex items-center justify-center gap-2"><Radar size={14}/> Growth Radar</div>
-                     
                      <div className="space-y-2 pt-2">
                         {radarResults.nodes.map((node, i) => (<div key={i} className="flex justify-between text-xs border-b pb-1"><span className="font-bold text-gray-700">{node.name}</span><span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span></div>))}
                      </div>
-
                      <div className="mt-2 text-center">
                         <button onClick={() => window.open(`https://earth.google.com/web/@${radarResults.pos.lat},${radarResults.pos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank')} className="text-[10px] text-blue-600 underline flex items-center justify-center gap-1"><ExternalLink size={10}/> Open in Earth (History)</button>
                      </div>
-                     <div className="mt-3 pt-2 bg-blue-50 p-2 rounded border border-blue-200 text-center">
-                        <div className="text-xs font-bold text-blue-800 flex items-center justify-center gap-1"><Phone size={12}/> For Price Quote</div>
+                     <div className="mt-3 pt-2 bg-blue-50 p-2 rounded border border-blue-200 text-center cursor-pointer hover:bg-blue-100" onClick={handleWhatsApp}>
+                        <div className="text-xs font-bold text-blue-800 flex items-center justify-center gap-1"><Phone size={12}/> Price & Ground Report</div>
                         <div className="font-bold text-gray-800 text-sm">Contact Admin</div>
                      </div>
                   </div>
@@ -625,7 +636,7 @@ const RealEstateSearchApp = () => {
         </div>
       </div>
 
-      {showSaveForm && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[2000] flex justify-center items-center p-4"><div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl"><h2 className="text-lg font-bold mb-4">Save Lead</h2><form onSubmit={handleSaveShape} className="space-y-4"><input name="label" required className="w-full border p-2 rounded" placeholder="Name" /><input name="survey_no" className="w-full border p-2 rounded" placeholder="Survey No" /><textarea name="note" className="w-full border p-2 rounded" placeholder="Notes..." /><div className="flex gap-2"><button type="button" onClick={() => setShowSaveForm(false)} className="flex-1 bg-gray-100 py-2 rounded">Cancel</button><button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold">Save</button></div></form></div></div> )}
+      {showSaveForm && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[2000] flex justify-center items-center p-4"><div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl"><h2 className="text-lg font-bold mb-4">Save Project / Lead</h2><form onSubmit={handleSaveShape} className="space-y-4"><input name="label" required className="w-full border p-2 rounded" placeholder="Project Name" /><input name="survey_no" className="w-full border p-2 rounded" placeholder="Survey No / Location" /><textarea name="note" className="w-full border p-2 rounded h-32" placeholder="Paste Locational Advantages & Highlights here..." /><div className="flex gap-2"><button type="button" onClick={() => setShowSaveForm(false)} className="flex-1 bg-gray-100 py-2 rounded">Cancel</button><button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold">Save</button></div></form></div></div> )}
     </div>
   );
 };
