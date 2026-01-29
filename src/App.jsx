@@ -13,8 +13,8 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
-const APP_PIN = "1234"; 
-const ADMIN_PHONE = "910000000000"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
+const APP_PIN = "4838"; 
+const ADMIN_PHONE = "917013007595"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
 const PRO_DOMAIN = "https://maps.safelanddeal.com"; // <--- FORCED DOMAIN FOR LINKS
 
 // --- LEAFLET ICONS ---
