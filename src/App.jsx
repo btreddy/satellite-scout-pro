@@ -13,8 +13,8 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
-const APP_PIN = "1234"; 
-const ADMIN_PHONE = "910000000000"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
+const APP_PIN = "4838"; 
+const ADMIN_PHONE = "917013007595"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -560,6 +560,24 @@ const RealEstateSearchApp = () => {
                     (Map View hidden in Brochure Mode - Click Close to explore Map)
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* --- FLOATING ACTION BAR (Only in Share Mode when Brochure is Closed) --- */}
+      {shareMode && !projectBrochure && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[5000] flex gap-4 bg-white p-2 rounded-full shadow-2xl border border-gray-200">
+          <button
+            onClick={() => setProjectBrochure(filteredLeads[0])} // Re-open the single shared lead
+            className="bg-blue-600 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"
+          >
+            <Info size={20}/> Project Info
+          </button>
+          <button
+            onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=I am interested in ${filteredLeads[0].label}`, '_blank')}
+            className="bg-green-600 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-green-700 animate-pulse"
+          >
+            <MessageCircle size={20}/> Enquire
+          </button>
         </div>
       )}
 
