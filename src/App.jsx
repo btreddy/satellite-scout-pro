@@ -4,7 +4,7 @@ import {
   X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, 
   Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, 
   ChevronUp, BookOpen, AlertTriangle, CheckCircle, Radar, FileText, 
-  Lock, Unlock, WifiOff, ArrowRight, Phone, Map, Info, MessageCircle, Share2, Eye
+  Lock, Unlock, WifiOff, ArrowRight, Phone, Map, Info, MessageCircle, Share2, Link
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -125,7 +125,8 @@ const RealEstateSearchApp = () => {
 
   const [isRadarMode, setIsRadarMode] = useState(false);
   const [radarResults, setRadarResults] = useState(null);
-  const [projectBrochure, setProjectBrochure] = useState(null); // New state for Brochure View
+  const [projectBrochure, setProjectBrochure] = useState(null); 
+  const [shareMode, setShareMode] = useState(false); // TRUE if user is viewing a shared link
   
   const [isAdmin, setIsAdmin] = useState(false); 
   const [showLogin, setShowLogin] = useState(false);
@@ -145,10 +146,11 @@ const RealEstateSearchApp = () => {
 
   useEffect(() => { fetchLeads(); }, []);
 
-  // --- SEARCH LOGIC ---
+  // --- UNIVERSAL SEARCH LOGIC ---
   useEffect(() => {
     if (!searchQuery) { 
-      setFilteredLeads(leads); 
+      // If in Share Mode, do NOT reset to show all leads. Keep the single lead.
+      if (!shareMode) setFilteredLeads(leads); 
     } else {
       const lowerQ = searchQuery.toLowerCase();
       const filtered = leads.filter(l => 
@@ -157,7 +159,7 @@ const RealEstateSearchApp = () => {
       );
       setFilteredLeads(filtered);
     }
-  }, [searchQuery, leads]);
+  }, [searchQuery, leads, shareMode]);
 
   const handleExternalSearch = async () => {
     const coordRegex = /(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/;
@@ -212,7 +214,27 @@ const RealEstateSearchApp = () => {
     } catch (err) { setUsingOfflineMode(true); }
 
     allLeads.sort((a,b) => (b.id || 0) - (a.id || 0));
-    setLeads(allLeads); setFilteredLeads(allLeads);
+    setLeads(allLeads);
+
+    // --- CHECK FOR SHARE LINK (DEEP LINKING) ---
+    const params = new URLSearchParams(window.location.search);
+    const sharedId = params.get('id');
+
+    if (sharedId) {
+        // FILTER TO ONLY THE SHARED PROJECT
+        const sharedProject = allLeads.find(l => l.id.toString() === sharedId);
+        if (sharedProject) {
+            setFilteredLeads([sharedProject]); // Only show this one
+            setCenterPos(sharedProject.center);
+            setProjectBrochure(sharedProject); // Auto-open brochure
+            setShareMode(true); // Lock search/view
+        } else {
+            alert("Project not found or invalid link.");
+            setFilteredLeads(allLeads);
+        }
+    } else {
+        setFilteredLeads(allLeads);
+    }
   };
 
   const handleLogin = (e) => {
@@ -229,6 +251,12 @@ const RealEstateSearchApp = () => {
   const handleShowBrochure = (lead) => {
     setProjectBrochure(lead);
     setCenterPos(lead.center);
+  };
+
+  const handleCopyLink = (id) => {
+      const url = `${window.location.origin}/?id=${id}`;
+      navigator.clipboard.writeText(url);
+      alert("Link Copied! Send this to the developer/client.\n\nThey will see ONLY this project.");
   };
 
   // --- PDF REPORT ---
@@ -352,7 +380,6 @@ const RealEstateSearchApp = () => {
   const handleSaveShape = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    // Updated to capture longer text for Project Highlights
     const leadData = { label: formData.get('label'), survey_no: formData.get('survey_no'), note: formData.get('note'), acres: tempArea, points: measurePoints, center: measurePoints[0] };
     const finalId = editingLead ? editingLead.id : Date.now();
     const finalLead = { ...leadData, id: finalId };
@@ -432,14 +459,15 @@ const RealEstateSearchApp = () => {
       <div className="bg-white shadow-md p-4 z-[5000] relative flex flex-col md:flex-row justify-between items-center h-auto md:h-16 gap-4 shrink-0">
         <div><h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Crosshair className="text-red-600"/> Satellite Scout Pro {usingOfflineMode && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded flex items-center gap-1"><WifiOff size={10}/> Offline</span>}</h1></div>
 
-        {/* UNIVERSAL SEARCH BAR */}
+        {/* UNIVERSAL SEARCH BAR (Hidden in Share Mode if you want privacy, but kept visible here for now) */}
+        {!shareMode && (
         <div className="flex-1 max-w-md mx-4 relative">
           <div className="flex items-center bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200">
             <Search size={18} className="text-gray-500 mr-2"/>
             <input type="text" placeholder="Search Address, Saved Leads, or Coords..." className="bg-transparent border-none outline-none text-sm w-full" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             
             {/* Show GO button if there is text */}
-            {searchQuery && !searchQuery.includes('http') && filteredLeads.length === 0 && (
+            {searchQuery && filteredLeads.length === 0 && (
                 <button onClick={handleExternalSearch} className="bg-blue-600 text-white p-1 rounded-md ml-2 hover:bg-blue-700 flex items-center gap-1 text-xs px-2 font-bold animate-pulse">GO <ArrowRight size={12}/></button>
             )}
 
@@ -460,6 +488,7 @@ const RealEstateSearchApp = () => {
             </div>
           )}
         </div>
+        )}
         
         <div className="flex items-center gap-2">
             
@@ -499,7 +528,7 @@ const RealEstateSearchApp = () => {
       {showLogin && ( <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs"><h2 className="text-xl font-bold mb-4 text-center">Enter Access PIN</h2><form onSubmit={handleLogin} className="space-y-3"><input type="password" name="pin" className="w-full border p-2 rounded text-center text-2xl tracking-widest" autoFocus placeholder="****" /><div className="flex gap-2"><button type="button" onClick={() => setShowLogin(false)} className="flex-1 py-2 bg-gray-100 rounded">Cancel</button><button type="submit" className="flex-1 bg-black text-white py-2 rounded font-bold">Unlock</button></div></form></div></div> )}
       {showResources && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div><div className="space-y-6"><div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div><div><h3 className="font-bold mb-2">Checklist</h3><ul className="list-disc pl-5 text-sm space-y-1"><li>Check Link Docs (30 Yrs)</li><li>Check Encumbrance Certificate (Online & Manual)</li><li>Check Prohibited List (Sec 22A)</li><li>Verify FTL / Nala Buffer Zones</li></ul></div></div></div></div> )}
 
-      {/* --- BROCHURE VIEW (NEW FEATURE) --- */}
+      {/* --- BROCHURE VIEW (Auto Opens for Share Links) --- */}
       {projectBrochure && (
         <div className="fixed inset-0 bg-white z-[6000] flex flex-col md:flex-row overflow-hidden">
             <div className="w-full md:w-1/3 p-6 bg-slate-50 border-r border-gray-200 overflow-y-auto relative">
@@ -602,7 +631,10 @@ const RealEstateSearchApp = () => {
                         <div className="text-center">
                             <div className="font-bold text-sm mb-1">{lead.label}</div>
                             <div className="text-xs text-gray-500 mb-2">{formatArea(lead.acres)}</div>
-                            <button onClick={() => handleShowBrochure(lead)} className="bg-blue-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1 mx-auto"><Info size={12}/> View Brochure</button>
+                            <div className="flex gap-2 justify-center">
+                                <button onClick={() => handleShowBrochure(lead)} className="bg-blue-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1"><Info size={12}/> Brochure</button>
+                                <button onClick={() => handleCopyLink(lead.id)} className="bg-gray-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1"><Link size={12}/> Share</button>
+                            </div>
                         </div>
                     </Popup>
                  </Polygon>
