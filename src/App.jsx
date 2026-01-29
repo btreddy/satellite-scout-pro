@@ -13,8 +13,9 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 // --- CONFIGURATION ---
-const APP_PIN = "4838"; 
-const ADMIN_PHONE = "9170130075"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
+const APP_PIN = "1234"; 
+const ADMIN_PHONE = "910000000000"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
+const PRO_DOMAIN = "https://maps.safelanddeal.com"; // <--- FORCED DOMAIN FOR LINKS
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -259,16 +260,18 @@ const RealEstateSearchApp = () => {
     setCenterPos(lead.center);
   };
 
-  // --- MODIFIED SHARE LOGIC FOR AGENTS ---
+  // --- MODIFIED SHARE LOGIC (FORCED DOMAIN) ---
   const handleCopyLink = (id) => {
       const agentNum = prompt("📢 Create Agent Link?\n\nEnter Agent's WhatsApp Number below (e.g. 919900...)\n\nLeave empty to create a Standard Link.", "");
       
-      let url = `${window.location.origin}/?id=${id}`;
+      // FIX: Always use the PRO_DOMAIN instead of window.location.origin
+      let url = `${PRO_DOMAIN}/?id=${id}`;
+      
       if(agentNum && agentNum.trim() !== "") {
           url += `&agent=${agentNum.trim()}`;
-          alert(`✅ Agent Link Created!\n\nCalls from this link will go to: ${agentNum}\n\nLink copied to clipboard.`);
+          alert(`✅ Agent Link Created!\n\nLink: ${url}\n\nCalls from this link will go to: ${agentNum}`);
       } else {
-          alert(`✅ Standard Link Created!\n\nCalls will go to YOU (Admin).\n\nLink copied to clipboard.`);
+          alert(`✅ Standard Link Created!\n\nLink: ${url}\n\nCalls will go to YOU (Admin).`);
       }
       
       navigator.clipboard.writeText(url);
@@ -472,7 +475,7 @@ const RealEstateSearchApp = () => {
       
       {/* HEADER */}
       <div className="bg-white shadow-md p-4 z-[5000] relative flex flex-col md:flex-row justify-between items-center h-auto md:h-16 gap-4 shrink-0">
-        <div><h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Crosshair className="text-red-600"/> Satellite Scout Pro {usingOfflineMode && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded flex items-center gap-1"><WifiOff size={10}/> Offline</span>}</h1></div>
+        <div><h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Crosshair className="text-red-600"/> Safe Land Deal {usingOfflineMode && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded flex items-center gap-1"><WifiOff size={10}/> Offline</span>}</h1></div>
 
         {/* UNIVERSAL SEARCH BAR (Hidden in Share Mode if you want privacy, but kept visible here for now) */}
         {!shareMode && (
@@ -583,7 +586,7 @@ const RealEstateSearchApp = () => {
                 
                 {/* Footer Quote */}
                 <div className="p-4 text-center text-[10px] text-gray-400 border-t">
-                   Powered by Satellite Scout Pro
+                   Powered by Safe Land Deal
                 </div>
             </div>
 
