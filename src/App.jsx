@@ -181,6 +181,7 @@ const RealEstateSearchApp = () => {
         let query = supabase.from('marketplace_ads').select('*');
         if (!isAdmin) query = query.eq('status', 'APPROVED');
         const { data } = await query;
+        console.log("📢 FETCHED ADS:", data);
         if (data) setMarketAds(data);
     } catch(e) { console.error(e); }
   };
@@ -219,6 +220,7 @@ const RealEstateSearchApp = () => {
     try {
         const { error } = await supabase.from('marketplace_ads').insert([newAd]);
         if (error) throw error;
+        fetchMarketplaceAds();
         alert("✅ Ad Submitted Successfully!\n\nYour ad is now PENDING approval.\nAdmin will verify the location and publish it.");
         setAdMode(null); setNewAdLocation(null);
     } catch(err) { alert("Error submitting ad."); }
