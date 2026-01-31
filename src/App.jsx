@@ -12,10 +12,10 @@ import { supabase } from './supabaseClient';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-// --- CONFIGURATION ---
-const APP_PIN = "8008"; 
-const ADMIN_PHONE = "917013007595"; // <--- CHANGE THIS TO YOUR WHATSAPP NO
-const PRO_DOMAIN = "https://maps.safelanddeal.com"; // <--- FORCED DOMAIN FOR LINKS
+// --- CONFIGURATION (SECURE) ---
+const APP_PIN = import.meta.env.VITE_APP_PIN || "1234"; 
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
+const PRO_DOMAIN = import.meta.env.VITE_PRO_DOMAIN || "https://maps.safelanddeal.com";
 
 // --- LEAFLET ICONS ---
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -244,11 +244,16 @@ const RealEstateSearchApp = () => {
     }
   };
 
-  const handleLogin = (e) => {
+ const handleLogin = (e) => {
     e.preventDefault();
     const pin = e.target.pin.value;
-    if(pin === APP_PIN) { setIsAdmin(true); setShowLogin(false); } 
-    else { alert("Incorrect PIN"); }
+    // We use APP_PIN here (New Name)
+    if(pin === APP_PIN) { 
+        setIsAdmin(true); 
+        setShowLogin(false); 
+    } else { 
+        alert("Incorrect PIN"); 
+    }
   };
 
   const handleWhatsApp = () => {
