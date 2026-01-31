@@ -14,7 +14,7 @@ import jsPDF from 'jspdf';
 
 // --- CONFIGURATION (SECURE) ---
 const APP_PIN = import.meta.env.VITE_APP_PIN || "1234"; 
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "910000000000"; 
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
 const PRO_DOMAIN = import.meta.env.VITE_PRO_DOMAIN || "https://maps.safelanddeal.com";
 
 // --- ICONS ---
