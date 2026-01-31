@@ -1,10 +1,10 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polygon, LayersControl, useMapEvents, useMap } from 'react-leaflet';
 import { 
-  X, Crosshair, Save, Ruler, Upload, Download, RotateCcw, RotateCw, 
-  Edit3, Trash2, Globe, Copy, ExternalLink, Search, Zap, ChevronDown, 
-  ChevronUp, BookOpen, AlertTriangle, CheckCircle, Radar, FileText, 
-  Lock, Unlock, WifiOff, ArrowRight, Phone, Map, Info, MessageCircle, Share2, Link, Building2, UserPlus
+  X, Crosshair, Ruler, Upload, Download, Trash2, Globe, Copy, ExternalLink, 
+  Search, Zap, Radar, FileText, Lock, Unlock, WifiOff, ArrowRight, Phone, 
+  Map as MapIcon, Info, MessageCircle, Link, Building2, Store, Tag, HandCoins, 
+  CheckCircle, AlertTriangle, BookOpen 
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -26,6 +26,22 @@ const EditIcon = L.divIcon({
   html: `<div style="background-color: white; border: 2px solid #ea580c; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
   iconSize: [12, 12],
   iconAnchor: [6, 6]
+});
+
+// Yellow Pin for "SELL" Ads
+const SellIcon = L.divIcon({
+  className: 'custom-pin',
+  html: `<div style="background-color: #EAB308; border: 2px solid white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 12px;">💲</div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 24]
+});
+
+// Blue Pin for "BUY" Ads
+const BuyIcon = L.divIcon({
+  className: 'custom-pin',
+  html: `<div style="background-color: #3B82F6; border: 2px solid white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 12px;">🔍</div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 24]
 });
 
 let DefaultIcon = L.icon({ 
@@ -118,6 +134,11 @@ const RealEstateSearchApp = () => {
   const [filteredLeads, setFilteredLeads] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // --- MARKETPLACE STATE ---
+  const [viewMode, setViewMode] = useState('VENTURES'); // 'VENTURES' or 'MARKETPLACE'
+  const [marketAds, setMarketAds] = useState([]);
+  const [showPostAdForm, setShowPostAdForm] = useState(false);
+
   const [measurePoints, setMeasurePoints] = useState([]); 
   const [redoStack, setRedoStack] = useState([]); 
   const [isMeasuring, setIsMeasuring] = useState(false);
@@ -129,7 +150,6 @@ const RealEstateSearchApp = () => {
   const [projectBrochure, setProjectBrochure] = useState(null); 
   const [shareMode, setShareMode] = useState(false); 
   
-  // --- CONTACT NUMBER STATE (Default: Admin) ---
   const [activeContactNumber, setActiveContactNumber] = useState(ADMIN_PHONE);
 
   const [isAdmin, setIsAdmin] = useState(false); 
@@ -148,7 +168,67 @@ const RealEstateSearchApp = () => {
   const fileInputRef = useRef(null);
   const mapRef = useRef(null); 
 
-  useEffect(() => { fetchLeads(); }, []);
+  useEffect(() => { 
+    fetchLeads(); 
+    fetchMarketplaceAds();
+  }, []);
+
+  useEffect(() => { fetchMarketplaceAds(); }, [isAdmin]); // Refetch if admin status changes
+
+  // --- MARKETPLACE FETCH ---
+  const fetchMarketplaceAds = async () => {
+    try {
+        let query = supabase.from('marketplace_ads').select('*');
+        if (!isAdmin) {
+            // Public only sees APPROVED ads
+            query = query.eq('status', 'APPROVED');
+        }
+        const { data, error } = await query;
+        if (!error && data) {
+            setMarketAds(data);
+        }
+    } catch(e) { console.error("Market fetch error", e); }
+  };
+
+  // --- MARKETPLACE SUBMIT ---
+  const handlePostAd = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    
+    const newAd = {
+        ad_type: formData.get('ad_type'),
+        price: formData.get('price'),
+        size: formData.get('size'),
+        contact_info: formData.get('contact_info'),
+        description: formData.get('description'),
+        lat: centerPos.lat, // Uses center of screen as location
+        lng: centerPos.lng,
+        status: 'PENDING' // Always pending first
+    };
+
+    try {
+        const { error } = await supabase.from('marketplace_ads').insert([newAd]);
+        if (error) throw error;
+        alert("✅ Ad Submitted Successfully!\n\nYour ad is now PENDING approval.\nContact Admin to approve it.");
+        setShowPostAdForm(false);
+    } catch(err) {
+        alert("Error submitting ad. Please try again.");
+    }
+  };
+
+  const handleApproveAd = async (adId) => {
+    if(!isAdmin) return;
+    if(!window.confirm("Approve this ad for public view?")) return;
+    await supabase.from('marketplace_ads').update({ status: 'APPROVED' }).eq('id', adId);
+    fetchMarketplaceAds();
+  };
+
+  const handleDeleteAd = async (adId) => {
+    if(!isAdmin) return;
+    if(!window.confirm("Delete this ad permanently?")) return;
+    await supabase.from('marketplace_ads').delete().eq('id', adId);
+    fetchMarketplaceAds();
+  };
 
   // --- UNIVERSAL SEARCH LOGIC ---
   useEffect(() => {
@@ -223,9 +303,8 @@ const RealEstateSearchApp = () => {
     const sharedId = params.get('id');
     const agentPhone = params.get('agent');
 
-    // --- AGENT LINK DETECTED? ---
     if(agentPhone) {
-        setActiveContactNumber(agentPhone); // Override Admin Phone
+        setActiveContactNumber(agentPhone);
     }
 
     if (sharedId) {
@@ -244,16 +323,11 @@ const RealEstateSearchApp = () => {
     }
   };
 
- const handleLogin = (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
     const pin = e.target.pin.value;
-    // We use APP_PIN here (New Name)
-    if(pin === APP_PIN) { 
-        setIsAdmin(true); 
-        setShowLogin(false); 
-    } else { 
-        alert("Incorrect PIN"); 
-    }
+    if(pin === APP_PIN) { setIsAdmin(true); setShowLogin(false); } 
+    else { alert("Incorrect PIN"); }
   };
 
   const handleWhatsApp = () => {
@@ -265,20 +339,15 @@ const RealEstateSearchApp = () => {
     setCenterPos(lead.center);
   };
 
-  // --- MODIFIED SHARE LOGIC (FORCED DOMAIN) ---
   const handleCopyLink = (id) => {
       const agentNum = prompt("📢 Create Agent Link?\n\nEnter Agent's WhatsApp Number below (e.g. 919900...)\n\nLeave empty to create a Standard Link.", "");
-      
-      // FIX: Always use the PRO_DOMAIN instead of window.location.origin
       let url = `${PRO_DOMAIN}/?id=${id}`;
-      
       if(agentNum && agentNum.trim() !== "") {
           url += `&agent=${agentNum.trim()}`;
           alert(`✅ Agent Link Created!\n\nLink: ${url}\n\nCalls from this link will go to: ${agentNum}`);
       } else {
           alert(`✅ Standard Link Created!\n\nLink: ${url}\n\nCalls will go to YOU (Admin).`);
       }
-      
       navigator.clipboard.writeText(url);
   };
 
@@ -482,80 +551,77 @@ const RealEstateSearchApp = () => {
       <div className="bg-white shadow-md p-4 z-[5000] relative flex flex-col md:flex-row justify-between items-center h-auto md:h-16 gap-4 shrink-0">
         <div><h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Crosshair className="text-red-600"/> Safe Land Deal {usingOfflineMode && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded flex items-center gap-1"><WifiOff size={10}/> Offline</span>}</h1></div>
 
-        {/* UNIVERSAL SEARCH BAR (Hidden in Share Mode if you want privacy, but kept visible here for now) */}
+        {/* --- VIEW MODE TOGGLE SWITCH --- */}
         {!shareMode && (
-        <div className="flex-1 max-w-md mx-4 relative">
+        <div className="flex bg-gray-100 rounded-lg p-1 border border-gray-200">
+            <button 
+                onClick={() => setViewMode('VENTURES')} 
+                className={`px-3 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-all ${viewMode === 'VENTURES' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}
+            >
+                <Building2 size={14}/> Ventures
+            </button>
+            <button 
+                onClick={() => setViewMode('MARKETPLACE')} 
+                className={`px-3 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-all ${viewMode === 'MARKETPLACE' ? 'bg-white shadow text-orange-600' : 'text-gray-500'}`}
+            >
+                <Store size={14}/> Marketplace
+            </button>
+        </div>
+        )}
+
+        {/* UNIVERSAL SEARCH BAR */}
+        {!shareMode && (
+        <div className="flex-1 max-w-md mx-4 relative hidden md:block">
           <div className="flex items-center bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200">
             <Search size={18} className="text-gray-500 mr-2"/>
             <input type="text" placeholder="Search Address, Saved Leads, or Coords..." className="bg-transparent border-none outline-none text-sm w-full" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-            
-            {/* Show GO button if there is text */}
             {searchQuery && filteredLeads.length === 0 && (
-                <button onClick={handleExternalSearch} className="bg-blue-600 text-white p-1 rounded-md ml-2 hover:bg-blue-700 flex items-center gap-1 text-xs px-2 font-bold animate-pulse">GO <ArrowRight size={12}/></button>
+                <button onClick={handleExternalSearch} className="bg-blue-600 text-white p-1 rounded-md ml-2 hover:bg-blue-700 flex items-center gap-1 text-xs px-2 font-bold">GO <ArrowRight size={12}/></button>
             )}
-
-            {(searchQuery.includes('http') || searchQuery.includes(',') || searchQuery.match(/\d/)) && (
-                <button onClick={handleExternalSearch} className="bg-blue-600 text-white p-1 rounded-md ml-2 hover:bg-blue-700 flex items-center gap-1 text-xs px-2 font-bold animate-pulse">GO <ArrowRight size={12}/></button>
-            )}
-            
             {searchQuery && !searchQuery.includes('http') && <button onClick={() => setSearchQuery('')}><X size={14} className="text-gray-400"/></button>}
           </div>
-          {searchQuery && filteredLeads.length > 0 && !searchQuery.includes('http') && !searchQuery.match(/\d{2}\./) && (
-            <div className="absolute top-full left-0 right-0 bg-white mt-1 shadow-xl rounded-lg border border-gray-100 z-50 max-h-60 overflow-y-auto">
-              {filteredLeads.map(lead => (
-                <div key={lead.id} onClick={() => { setCenterPos(lead.center); setSearchQuery(''); }} className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0">
-                  <div className="font-bold text-sm text-gray-800">{lead.survey_no}</div>
-                  <div className="text-xs text-gray-500">{lead.label}</div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
         )}
         
         <div className="flex items-center gap-2">
-            
           {/* WHATSAPP CONTACT BUTTON */}
           <button onClick={handleWhatsApp} className="p-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg border border-green-200 font-bold flex items-center gap-2" title="Contact Admin">
             <MessageCircle size={20}/> <span className="hidden md:inline text-sm">Contact</span>
           </button>
 
+          {/* MARKETPLACE POST BUTTON */}
+          {viewMode === 'MARKETPLACE' && (
+              <button onClick={() => setShowPostAdForm(true)} className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 text-white rounded-lg text-sm font-bold hover:bg-orange-700 animate-pulse">
+                <Tag size={14}/> Post Ad
+              </button>
+          )}
+
           {isAdmin ? (
              <>
+                {viewMode === 'VENTURES' && (
+                <>
                 <button onClick={() => { setIsRadarMode(!isRadarMode); setIsMeasuring(false); setRadarResults(null); }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${isRadarMode ? 'bg-purple-100 text-purple-700 border-purple-200 animate-pulse' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}><Radar size={16}/> Radar</button>
                 <button onClick={handleGeneratePDF} className="p-2 text-red-600 hover:bg-red-50 rounded-lg border border-red-100 bg-white" title="Download PDF"><FileText size={20}/></button>
                 <div className="h-6 w-px bg-gray-300 mx-1"></div>
                 <button onClick={() => { setIsMeasuring(!isMeasuring); if(!isMeasuring) { setMeasurePoints([]); setRedoStack([]); setEditingLead(null); setIsRadarMode(false); } }} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold border transition-colors ${isMeasuring ? 'bg-orange-500 text-white border-orange-600' : 'text-gray-600 hover:bg-gray-200'}`}><Ruler size={16}/> {isMeasuring ? 'Stop' : 'Measure'}</button>
                 <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"><Upload size={20}/></button> <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json,.geojson,.kml" />
                 <button onClick={handleExportBackup} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" title="Export Backup"><Download size={20}/></button>
+                </>
+                )}
                 <button onClick={() => setIsAdmin(false)} className="p-2 text-gray-400 hover:text-red-500"><Unlock size={20}/></button>
              </>
           ) : ( <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-900"><Lock size={14}/> Admin Login</button> )}
           <button onClick={() => setShowResources(true)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-100 bg-white"><BookOpen size={20}/></button>
-          <div className="relative">
-             <button onClick={() => setShowToolsMenu(!showToolsMenu)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border bg-white text-gray-700 border-gray-300 hover:bg-gray-50"><Globe size={16}/> Tools</button>
-             {showToolsMenu && (
-                <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 z-[5001]">
-                   <div className="text-[10px] font-bold text-gray-400 uppercase px-2 mb-1">External Apps</div>
-                   <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><ExternalLink size={14}/> Open Google Earth</button>
-                   <button onClick={() => { window.open(`https://bhuvan.nrsc.gov.in/ngmaps#17/${centerPos.lat}/${centerPos.lng}`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><Globe size={14}/> Open Bhuvan NG (New)</button>
-                   <button onClick={() => { window.open("https://bhubharati.telangana.gov.in/knowLandStatus", '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><div className="w-4 flex justify-center text-[10px] font-bold">B</div> Open Bhubharati</button>
-                   <div className="h-px bg-gray-100 my-1"></div>
-                   <button onClick={() => { navigator.clipboard.writeText(`${centerPos.lat}, ${centerPos.lng}`); alert('Copied!'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"><Copy size={14}/> Copy Coords</button>
-                </div>
-             )}
-          </div>
         </div>
       </div>
 
       {showLogin && ( <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs"><h2 className="text-xl font-bold mb-4 text-center">Enter Access PIN</h2><form onSubmit={handleLogin} className="space-y-3"><input type="password" name="pin" className="w-full border p-2 rounded text-center text-2xl tracking-widest" autoFocus placeholder="****" /><div className="flex gap-2"><button type="button" onClick={() => setShowLogin(false)} className="flex-1 py-2 bg-gray-100 rounded">Cancel</button><button type="submit" className="flex-1 bg-black text-white py-2 rounded font-bold">Unlock</button></div></form></div></div> )}
-      {showResources && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div><div className="space-y-6"><div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div><div><h3 className="font-bold mb-2">Checklist</h3><ul className="list-disc pl-5 text-sm space-y-1"><li>Check Link Docs (30 Yrs)</li><li>Check Encumbrance Certificate (Online & Manual)</li><li>Check Prohibited List (Sec 22A)</li><li>Verify FTL / Nala Buffer Zones</li></ul></div></div></div></div> )}
+      {showResources && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div><div className="space-y-6"><div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div></div></div></div> )}
 
       {/* --- BROCHURE VIEW (Auto Opens for Share Links) --- */}
       {projectBrochure && (
         <div className="fixed inset-0 bg-white z-[6000] flex flex-col md:flex-row overflow-hidden">
             <div className="w-full md:w-1/3 bg-slate-50 border-r border-gray-200 overflow-y-auto relative flex flex-col">
-                {/* --- HEADER (BRANDING) --- */}
                 <div className="bg-slate-900 p-6 text-white relative">
                    <button onClick={() => setProjectBrochure(null)} className="absolute top-4 right-4 bg-white/20 p-2 rounded-full hover:bg-white/30 text-white"><X size={20}/></button>
                    <div className="flex items-center gap-3 mb-2">
@@ -564,7 +630,7 @@ const RealEstateSearchApp = () => {
                    </div>
                    <h1 className="text-2xl font-bold leading-tight">{projectBrochure.label}</h1>
                    <div className="flex items-center gap-2 mt-2 text-slate-300 text-sm">
-                      <Map size={14}/> <span>{projectBrochure.survey_no || "Location Not Specified"}</span>
+                      <MapIcon size={14}/> <span>{projectBrochure.survey_no || "Location Not Specified"}</span>
                    </div>
                 </div>
 
@@ -581,7 +647,6 @@ const RealEstateSearchApp = () => {
                             <div className="text-xs text-gray-400 font-bold uppercase mb-1">Total Area</div>
                             <div className="text-xl font-bold text-slate-800">{formatArea(projectBrochure.acres)}</div>
                         </div>
-                         {/* BIG ENQUIRE BUTTON - Uses Dynamic Contact Number */}
                         <button onClick={() => window.open(`https://wa.me/${activeContactNumber}?text=I am interested in ${projectBrochure.label}`, '_blank')} className="bg-green-600 text-white rounded-xl flex flex-col items-center justify-center p-2 font-bold hover:bg-green-700 transition-colors shadow-lg shadow-green-200">
                             <MessageCircle size={24} className="mb-1"/>
                             <span>Enquire Now</span>
@@ -589,39 +654,54 @@ const RealEstateSearchApp = () => {
                     </div>
                 </div>
                 
-                {/* Footer Quote */}
-                <div className="p-4 text-center text-[10px] text-gray-400 border-t">
-                   Powered by Safe Land Deal
-                </div>
+                <div className="p-4 text-center text-[10px] text-gray-400 border-t">Powered by Safe Land Deal</div>
             </div>
-
             <div className="flex-1 relative bg-gray-100">
                 <button onClick={() => setProjectBrochure(null)} className="absolute top-4 right-4 bg-white p-2 rounded-lg shadow z-[7000] md:hidden font-bold text-xs">Close Brochure</button>
-                <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                    (Map View hidden in Brochure Mode - Click Close to explore Map)
+                <div className="absolute inset-0 flex items-center justify-center text-gray-400">(Map View hidden in Brochure Mode - Click Close to explore Map)</div>
+            </div>
+        </div>
+      )}
+
+      {/* --- POST AD FORM (MARKETPLACE) --- */}
+      {showPostAdForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="bg-orange-600 p-4 text-white flex justify-between items-center">
+                    <h2 className="font-bold flex items-center gap-2"><Store size={20}/> Post Property Ad</h2>
+                    <button onClick={() => setShowPostAdForm(false)} className="hover:bg-white/20 p-1 rounded"><X size={20}/></button>
+                </div>
+                <div className="p-6">
+                    <div className="bg-blue-50 border-l-4 border-blue-500 p-3 mb-4 text-xs text-blue-700">
+                        <p className="font-bold">📍 Location Tip:</p>
+                        Drag the map to the exact location BEFORE opening this form. The center of your screen will be the ad location.
+                    </div>
+                    <form onSubmit={handlePostAd} className="space-y-3">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">I want to...</label>
+                            <div className="flex gap-2">
+                                <label className="flex-1 border rounded-lg p-2 flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 has-[:checked]:bg-yellow-50 has-[:checked]:border-yellow-500 has-[:checked]:text-yellow-700">
+                                    <input type="radio" name="ad_type" value="SELL" defaultChecked className="hidden"/>
+                                    <Tag size={16}/> SELL Plot
+                                </label>
+                                <label className="flex-1 border rounded-lg p-2 flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 has-[:checked]:text-blue-700">
+                                    <input type="radio" name="ad_type" value="BUY" className="hidden"/>
+                                    <HandCoins size={16}/> BUY Plot
+                                </label>
+                            </div>
+                        </div>
+                        <div><label className="text-xs font-bold text-gray-500">Size (e.g., 200 Sq Yds)</label><input name="size" required className="w-full border p-2 rounded text-sm"/></div>
+                        <div><label className="text-xs font-bold text-gray-500">Price Expectation</label><input name="price" required className="w-full border p-2 rounded text-sm"/></div>
+                        <div><label className="text-xs font-bold text-gray-500">WhatsApp Number</label><input name="contact_info" required className="w-full border p-2 rounded text-sm"/></div>
+                        <div><label className="text-xs font-bold text-gray-500">Description / Highlights</label><textarea name="description" rows="3" className="w-full border p-2 rounded text-sm"></textarea></div>
+                        <button type="submit" className="w-full bg-black text-white py-3 rounded-lg font-bold hover:bg-gray-800">Submit Ad for Approval</button>
+                    </form>
                 </div>
             </div>
         </div>
       )}
 
-      {/* --- FLOATING ACTION BAR (Only in Share Mode when Brochure is Closed) --- */}
-      {shareMode && !projectBrochure && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[5000] flex gap-4 bg-white p-2 rounded-full shadow-2xl border border-gray-200">
-          <button
-            onClick={() => setProjectBrochure(filteredLeads[0])} 
-            className="bg-slate-800 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-slate-900 transition-transform hover:scale-105"
-          >
-            <Info size={20}/> Project Info
-          </button>
-          <button
-            onClick={() => window.open(`https://wa.me/${activeContactNumber}?text=I am interested in ${filteredLeads[0].label}`, '_blank')}
-            className="bg-green-600 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-green-700 animate-pulse"
-          >
-            <MessageCircle size={20}/> Enquire
-          </button>
-        </div>
-      )}
-
+      {/* --- MAP AREA --- */}
       <div className="flex flex-1 relative h-[85vh]">
         {showCoordsPanel && isMeasuring && ( 
             <div className="w-80 bg-white shadow-xl z-10 overflow-y-auto border-r border-gray-200 flex flex-col">
@@ -631,19 +711,6 @@ const RealEstateSearchApp = () => {
                     <button onClick={() => { setMeasurePoints([]); setTempArea(0); }} className="w-full bg-red-50 text-red-700 py-2 rounded text-xs font-bold mb-2 flex items-center justify-center gap-2"><Trash2 size={14}/> Wipe Shape</button>
                     <div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div>
                 </div>
-
-                <div className="mt-4 px-4 border-t pt-2">
-                    <h4 className="font-bold text-xs text-gray-500 mb-2">Coordinates (Lat, Lng)</h4>
-                    <div className="space-y-1 max-h-40 overflow-y-auto text-xs pb-4">
-                        {measurePoints.map((pt, i) => (
-                        <div key={i} className="flex justify-between bg-gray-100 p-1.5 rounded">
-                            <span className="font-bold text-gray-600">Pt {i+1}</span>
-                            <span className="font-mono select-all">{pt.lat.toFixed(6)}, {pt.lng.toFixed(6)}</span>
-                        </div>
-                        ))}
-                    </div>
-                </div>
-
                 <div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Project</button></div>
             </div> 
         )}
@@ -656,72 +723,75 @@ const RealEstateSearchApp = () => {
               <LayersControl.BaseLayer name="Google Streets"><TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" attribution='© Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
             </LayersControl>
             
-            {/* --- LABELS FOR DIMENSIONS (LENGTH) AND ANGLES --- */}
-            {measurePoints.map((pt, i) => {
-               const nextPt = measurePoints[(i + 1) % measurePoints.length];
-               const midLat = (pt.lat + nextPt.lat) / 2;
-               const midLng = (pt.lng + nextPt.lng) / 2;
-               const distMeters = getDistanceMeters(pt, nextPt);
-               const distFeet = Math.round(distMeters * 3.28084);
-               const prevPt = measurePoints[(i - 1 + measurePoints.length) % measurePoints.length];
-               const bearingIn = getBearing(prevPt, pt);
-               const bearingOut = getBearing(pt, nextPt);
-               let angle = (bearingOut - bearingIn + 360) % 360;
-               if (angle > 180) angle = 360 - angle; 
-               if (measurePoints.length < 2) return null;
-
-               return (
-                 <React.Fragment key={i}>
-                    {i < measurePoints.length - 1 || measurePoints.length > 2 ? (
-                        <Marker position={[midLat, midLng]} icon={L.divIcon({ className: 'text-label', html: `<div style="background:none; color: white; text-shadow: 1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black; font-size: 10px; font-weight: bold; white-space: nowrap;">${distFeet} ft</div>`, iconSize: [40, 10], iconAnchor: [20, 5] })} />
-                    ) : null}
-                    {measurePoints.length > 2 && (
-                       <Marker position={pt} icon={L.divIcon({ className: 'angle-label', html: `<div style="background:none; color: yellow; text-shadow: 1px 1px 2px black; font-size: 9px; font-weight: bold;">${Math.round(angle)}°</div>`, iconSize: [20, 10], iconAnchor: [10, -10] })} />
-                    )}
-                 </React.Fragment>
-               );
-            })}
-            
-            {filteredLeads.map((lead) => {
-               if(editingLead && editingLead.id === lead.id) return null;
-               return (
-                 <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }} eventHandlers={{ click: () => { if(isAdmin) handleEditShape(lead); } }}>
-                    <Popup>
-                        <div className="text-center">
-                            <div className="font-bold text-sm mb-1">{lead.label}</div>
-                            <div className="text-xs text-gray-500 mb-2">{formatArea(lead.acres)}</div>
-                            <div className="flex gap-2 justify-center">
-                                <button onClick={() => handleShowBrochure(lead)} className="bg-blue-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1"><Info size={12}/> Brochure</button>
-                                
-                                {/* SHARE BUTTON WITH AGENT LOGIC */}
-                                <button onClick={() => handleCopyLink(lead.id)} className="bg-gray-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1"><Link size={12}/> Share</button>
+            {/* --- VENTURES MODE LAYERS --- */}
+            {viewMode === 'VENTURES' && (
+                <>
+                {measurePoints.map((pt, i) => {
+                   if (measurePoints.length < 2) return null;
+                   const nextPt = measurePoints[(i + 1) % measurePoints.length];
+                   const midLat = (pt.lat + nextPt.lat) / 2;
+                   const midLng = (pt.lng + nextPt.lng) / 2;
+                   const distFeet = Math.round(getDistanceMeters(pt, nextPt) * 3.28084);
+                   return i < measurePoints.length - 1 || measurePoints.length > 2 ? <Marker key={`dist-${i}`} position={[midLat, midLng]} icon={L.divIcon({ className: 'text-label', html: `<div style="background:none; color: white; text-shadow: 1px 1px 2px black; font-size: 10px; font-weight: bold;">${distFeet} ft</div>`, iconSize: [40, 10], iconAnchor: [20, 5] })} /> : null;
+                })}
+                {filteredLeads.map((lead) => {
+                   if(editingLead && editingLead.id === lead.id) return null;
+                   return (
+                     <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }} eventHandlers={{ click: () => { if(isAdmin) handleEditShape(lead); } }}>
+                        <Popup>
+                            <div className="text-center">
+                                <div className="font-bold text-sm mb-1">{lead.label}</div>
+                                <div className="text-xs text-gray-500 mb-2">{formatArea(lead.acres)}</div>
+                                <div className="flex gap-2 justify-center">
+                                    <button onClick={() => handleShowBrochure(lead)} className="bg-blue-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1"><Info size={12}/> Brochure</button>
+                                    <button onClick={() => handleCopyLink(lead.id)} className="bg-gray-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1"><Link size={12}/> Share</button>
+                                </div>
                             </div>
+                        </Popup>
+                     </Polygon>
+                   );
+                })}
+                {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
+                </>
+            )}
+
+            {/* --- MARKETPLACE MODE LAYERS --- */}
+            {viewMode === 'MARKETPLACE' && marketAds.map((ad) => (
+                <Marker 
+                    key={ad.id} 
+                    position={[ad.lat, ad.lng]} 
+                    icon={ad.ad_type === 'SELL' ? SellIcon : BuyIcon}
+                >
+                    <Popup>
+                        <div className="p-1 min-w-[200px]">
+                            <div className={`text-xs font-bold px-2 py-1 rounded w-fit mb-2 ${ad.ad_type === 'SELL' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
+                                {ad.ad_type === 'SELL' ? 'FOR SALE' : 'WANTED'}
+                            </div>
+                            <div className="font-bold text-sm mb-1">{ad.size}</div>
+                            <div className="text-gray-600 text-xs mb-2">{ad.price}</div>
+                            <p className="text-xs italic text-gray-500 mb-3">{ad.description}</p>
+                            
+                            <button onClick={() => window.open(`https://wa.me/${ad.contact_info}?text=Hi, saw your ${ad.ad_type} ad on SafeLand Maps.`, '_blank')} className="w-full bg-green-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 mb-2">
+                                <MessageCircle size={14}/> Contact Owner
+                            </button>
+
+                            {isAdmin && (
+                                <div className="border-t pt-2 flex gap-2">
+                                    {ad.status === 'PENDING' && (
+                                        <button onClick={() => handleApproveAd(ad.id)} className="flex-1 bg-blue-600 text-white text-[10px] py-1 rounded font-bold">Approve</button>
+                                    )}
+                                    <button onClick={() => handleDeleteAd(ad.id)} className="flex-1 bg-red-100 text-red-600 text-[10px] py-1 rounded font-bold">Delete</button>
+                                </div>
+                            )}
+                            
+                            {ad.status === 'PENDING' && <div className="text-[10px] text-red-500 font-bold mt-1 text-center bg-red-50 p-1 rounded border border-red-200">⚠️ PENDING APPROVAL</div>}
                         </div>
                     </Popup>
-                 </Polygon>
-               );
-            })}
-            
-            {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
-            {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Location<br/>{tempSearchMarker.lat.toFixed(4)}, {tempSearchMarker.lng.toFixed(4)}</Popup></Marker>}
+                </Marker>
+            ))}
 
-            {radarResults && ( 
-               <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
-                  <div className="min-w-[220px]">
-                     <div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-center flex items-center justify-center gap-2"><Radar size={14}/> Growth Radar</div>
-                     <div className="space-y-2 pt-2">
-                        {radarResults.nodes.map((node, i) => (<div key={i} className="flex justify-between text-xs border-b pb-1"><span className="font-bold text-gray-700">{node.name}</span><span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span></div>))}
-                     </div>
-                     <div className="mt-2 text-center">
-                        <button onClick={() => window.open(`https://earth.google.com/web/@${radarResults.pos.lat},${radarResults.pos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank')} className="text-[10px] text-blue-600 underline flex items-center justify-center gap-1"><ExternalLink size={10}/> Open in Earth (History)</button>
-                     </div>
-                     <div className="mt-3 pt-2 bg-blue-50 p-2 rounded border border-blue-200 text-center cursor-pointer hover:bg-blue-100" onClick={handleWhatsApp}>
-                        <div className="text-xs font-bold text-blue-800 flex items-center justify-center gap-1"><Phone size={12}/> Price & Ground Report</div>
-                        <div className="font-bold text-gray-800 text-sm">Contact Admin</div>
-                     </div>
-                  </div>
-               </Popup> 
-            )}
+            {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Location<br/>{tempSearchMarker.lat.toFixed(4)}, {tempSearchMarker.lng.toFixed(4)}</Popup></Marker>}
+            {radarResults && <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}><div className="min-w-[220px]"><div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-center flex items-center justify-center gap-2"><Radar size={14}/> Growth Radar</div><div className="space-y-2 pt-2">{radarResults.nodes.map((node, i) => (<div key={i} className="flex justify-between text-xs border-b pb-1"><span className="font-bold text-gray-700">{node.name}</span><span className="bg-purple-100 text-purple-700 px-1 rounded font-bold">{node.dist} km</span></div>))}</div></div></Popup>}
             
             <DraggableMarker />
             <MapClickHandler />
