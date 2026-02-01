@@ -618,16 +618,56 @@ const RealEstateSearchApp = () => {
             {viewMode === 'MARKETPLACE' && marketAds.map((ad) => (
                 <React.Fragment key={ad.id}>
                     <Marker position={[ad.lat, ad.lng]} icon={ad.ad_type === 'SELL' ? SellIcon : LookIcon}>
-                        <Popup>
-                            <div className="p-1 min-w-[200px]">
-                                <div className={`text-xs font-bold px-2 py-1 rounded w-fit mb-2 ${ad.ad_type === 'SELL' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{ad.ad_type === 'SELL' ? 'FOR SALE' : 'LOOKING FOR'}</div>
-                                <div className="font-bold text-sm mb-1">{ad.size} Sq Yds</div>
-                                <div className="text-gray-600 text-xs mb-2">{ad.price}</div>
-                                <button onClick={() => window.open(`https://wa.me/${ad.contact_info}?text=Hi, regarding your ad...`, '_blank')} className="w-full bg-green-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 mb-2"><MessageCircle size={14}/> Contact</button>
-                                {isAdmin && ad.status === 'PENDING' && <button onClick={() => handleApproveAd(ad.id)} className="w-full bg-blue-600 text-white text-[10px] py-1 rounded font-bold">Approve</button>}
-                                {isAdmin && <button onClick={() => handleDeleteAd(ad.id)} className="w-full bg-red-100 text-red-600 text-[10px] py-1 rounded font-bold mt-1">Delete</button>}
-                            </div>
-                        </Popup>
+                        <Popup className="premium-popup">
+    <div className="p-0 min-w-[220px] max-w-[240px]">
+        
+        {/* --- TEMPLATE HEADER: BROCHURE IMAGE --- */}
+        <div className="relative h-28 bg-gray-200 rounded-t-lg overflow-hidden">
+            {/* Creates a placeholder image for DEMO purposes */}
+            <img 
+                src="https://arisingdevelopers.com/wp-content/uploads/2025/01/WhatsApp-Image-2025-01-27-at-14.37.00-1-1024x770.jpeg" 
+                alt="Plot View" 
+                className="w-full h-full object-cover"
+            />
+            <div className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded shadow-sm ${ad.ad_type === 'SELL' ? 'bg-yellow-400 text-yellow-900' : 'bg-blue-500 text-white'}`}>
+                {ad.ad_type === 'SELL' ? 'FOR SALE' : 'WANTED'}
+            </div>
+            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/70 to-transparent p-2">
+                <div className="text-white font-bold text-lg leading-none">{ad.size} <span className="text-xs font-normal">Sq Yds</span></div>
+            </div>
+        </div>
+
+        {/* --- BODY CONTENT --- */}
+        <div className="p-3 bg-white">
+            <div className="flex justify-between items-center mb-2">
+                <span className="text-green-700 font-bold text-lg">{ad.price}</span>
+            </div>
+            
+            <p className="text-gray-500 text-xs line-clamp-2 mb-3 border-l-2 border-gray-300 pl-2 italic">
+                {ad.description || "No description provided."}
+            </p>
+
+            {/* --- ACTION BUTTONS --- */}
+            <button onClick={() => window.open(`https://wa.me/${ad.contact_info}?text=Hi, regarding your ad for ${ad.size} Sq Yds...`, '_blank')} className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 mb-2 shadow-md transition-all">
+                <MessageCircle size={16}/> Contact Owner
+            </button>
+            
+            {/* DEMO: VIDEO BUTTON (Show them this capability!) */}
+            <button onClick={() => alert("This would open the In-App Video Player! (Coming Soon)")} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-gray-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Watch Video Tour
+            </button>
+
+            {/* ADMIN CONTROLS */}
+            {isAdmin && (
+                <div className="grid grid-cols-2 gap-2 mt-3 pt-2 border-t">
+                    {ad.status === 'PENDING' && <button onClick={() => handleApproveAd(ad.id)} className="bg-blue-100 text-blue-700 hover:bg-blue-200 text-[10px] py-1 rounded font-bold">Approve</button>}
+                    <button onClick={() => handleDeleteAd(ad.id)} className="bg-red-50 text-red-600 hover:bg-red-100 text-[10px] py-1 rounded font-bold col-span-2">Delete Ad</button>
+                </div>
+            )}
+        </div>
+    </div>
+</Popup>
                     </Marker>
                     {ad.ad_type === 'SELL' && ad.points && <Polygon positions={ad.points} pathOptions={{ color: 'yellow', weight: 2, dashArray: '5, 5', fillColor: 'yellow', fillOpacity: 0.2 }} />}
                     {ad.ad_type === 'LOOKING' && <Circle center={[ad.lat, ad.lng]} radius={1000} pathOptions={{ color: 'blue', weight: 1, dashArray: '5, 5', fillColor: 'blue', fillOpacity: 0.1 }} />}
