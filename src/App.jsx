@@ -20,9 +20,12 @@ import {
 // --- CONFIGURATION ---
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
-const PIN_CODE = "1234"; 
 
+// Load Admin Secrets from .env
+const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; // Fallback to 1234 if missing
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999"; 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // --- ICONS SETUP ---
 const DefaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
