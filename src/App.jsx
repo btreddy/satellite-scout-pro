@@ -23,7 +23,7 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
 // Load Admin Secrets from .env
 const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; // Fallback to 1234 if missing
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999"; 
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // --- ICONS SETUP ---
@@ -308,6 +308,13 @@ const RealEstateSearchApp = () => {
       
       {/* --- TOP BAR (GLOW MENU) --- */}
       <header className="bg-slate-900 px-4 py-3 flex justify-between items-center z-[2000] shadow-md text-white">
+        {/* Add this inside your <header> ... <div> */}
+<button 
+    onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=Help needed with the App`, '_blank')}
+    className="bg-green-600 text-white p-2 rounded-lg font-bold text-xs flex items-center gap-1"
+>
+    <MessageCircle size={14}/> Support
+</button>
         <div className="flex items-center gap-3">
             <div className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-1.5 rounded-lg shadow-lg">
                 <Crosshair size={20} className="animate-spin-slow" />
