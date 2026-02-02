@@ -23,7 +23,7 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
 // Load Secrets from .env (with fallbacks)
 const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; 
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999"; 
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -364,8 +364,18 @@ const RealEstateSearchApp = () => {
 
       {/* --- MAP AREA --- */}
       <div className="flex-1 relative z-0">
-        <MapContainer center={[17.0500, 78.5500]} zoom={13} style={{ height: "100%", width: "100%" }}>
-          <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri" />
+        <MapContainer 
+    center={[17.0500, 78.5500]} 
+    zoom={13} 
+    maxZoom={22} // <--- ALLOW ZOOM UP TO 22
+    style={{ height: "100%", width: "100%" }}
+>
+  <TileLayer 
+    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" 
+    attribution="Esri" 
+    maxNativeZoom={18} // <--- "Real" images stop at 18
+    maxZoom={22}       // <--- Allow "Digital" zoom up to 22
+  />
           
           <FlyToSearchResult />
 
