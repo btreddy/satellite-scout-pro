@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle, Polygon, FeatureGroup } from 'react-leaflet';
-import { EditControl } from "react-leaflet-draw"; // THE PRO DRAWING TOOL
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polygon, FeatureGroup } from 'react-leaflet';
+import { EditControl } from "react-leaflet-draw"; 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import "leaflet-draw/dist/leaflet.draw.css"; // DRAWING CSS
+import "leaflet-draw/dist/leaflet.draw.css"; 
 import { createClient } from '@supabase/supabase-js';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; 
@@ -21,9 +21,10 @@ import {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
-// Load Admin Secrets from .env
-const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; // Fallback to 1234 if missing
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
+// Load Secrets from .env (with fallbacks)
+const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; 
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999"; 
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // --- ICONS SETUP ---
@@ -46,7 +47,7 @@ const GROWTH_NODES = [
 
 const RealEstateSearchApp = () => {
   // --- GLOBAL STATE ---
-  const [viewMode, setViewMode] = useState('MARKETPLACE'); // 'MARKETPLACE' or 'VENTURE'
+  const [viewMode, setViewMode] = useState('MARKETPLACE'); 
   const [isAdmin, setIsAdmin] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [showPinModal, setShowPinModal] = useState(false);
@@ -60,11 +61,11 @@ const RealEstateSearchApp = () => {
   const [newAdData, setNewAdData] = useState({ type: 'SELL', size: '', price: '', contact: '', desc: '', size_unit: 'Sq Yds' });
   const [radarResults, setRadarResults] = useState(null);
 
-  // --- VENTURE PLANNER STATE (PRO VERSION) ---
+  // --- VENTURE PLANNER STATE ---
   const [projects, setProjects] = useState([]);
   const [showSaveForm, setShowSaveForm] = useState(false);
-  const [currentShape, setCurrentShape] = useState(null); // Stores the shape being drawn
-  const featureGroupRef = useRef(); // Reference to the drawing layer
+  const [currentShape, setCurrentShape] = useState(null); 
+  const featureGroupRef = useRef(); 
 
   // --- INVESTMENT AUDIT STATE ---
   const [showRatingModal, setShowRatingModal] = useState(false);
@@ -84,7 +85,6 @@ const RealEstateSearchApp = () => {
   // 1. DATABASE FUNCTIONS
   // ==========================================
   
-  // MARKETPLACE FETCH
   const fetchMarketplaceAds = async () => {
     try {
         let query = supabase.from('marketplace_ads').select('*');
@@ -94,11 +94,9 @@ const RealEstateSearchApp = () => {
     } catch(e) { console.error(e); }
   };
 
-  // POST AD
   const handlePostAd = async () => {
     if(!newAdLocation) return alert("Set location first.");
     
-    // Auto-Calculate Polygon for Visuals
     const sizeInSqMeters = parseInt(newAdData.size) * 0.836127; 
     const sideLength = Math.sqrt(sizeInSqMeters); 
     const offset = (sideLength / 2) / 111139; 
@@ -127,7 +125,6 @@ const RealEstateSearchApp = () => {
   const handleApproveAd = async (id) => { await supabase.from('marketplace_ads').update({ status: 'APPROVED' }).eq('id', id); fetchMarketplaceAds(); };
   const handleDeleteAd = async (id) => { await supabase.from('marketplace_ads').delete().eq('id', id); fetchMarketplaceAds(); };
 
-  // VENTURE PROJECTS FETCH
   const fetchProjects = async () => {
     try {
       const { data } = await supabase.from('projects').select('*');
@@ -141,45 +138,31 @@ const RealEstateSearchApp = () => {
     if (!currentShape) return alert("No shape drawn!");
 
     try {
-        // 1. EXTRACT & CLEAN POINTS
-        // Leaflet Draw returns data differently for Polygons vs Rectangles.
-        // We normalize it here to always be a flat list of {lat, lng}.
         const layer = currentShape.layer;
         let rawLatLngs = layer.getLatLngs();
-
-        // If it's a Polygon (nested array), flatten it to get the outer ring
         if (Array.isArray(rawLatLngs[0]) && typeof rawLatLngs[0].lat !== 'number') {
             rawLatLngs = rawLatLngs[0];
         }
-
-        // Convert to simple clean JSON objects
         const cleanPoints = rawLatLngs.map(p => ({ lat: p.lat, lng: p.lng }));
 
-        console.log("Saving Points:", cleanPoints); // Debugging log
-
-        // 2. GATHER FORM DATA
         const formData = new FormData(e.target);
         const newProject = {
             name: formData.get('label'),
             survey_number: formData.get('survey_no'),
             notes: formData.get('note'),
-            points: cleanPoints, // Send the clean JSON
+            points: cleanPoints,
             color: 'cyan'
         };
         
-        // 3. SEND TO SUPABASE
-        const { data, error } = await supabase.from('projects').insert([newProject]).select();
+        const { error } = await supabase.from('projects').insert([newProject]);
 
         if (error) {
-            console.error("Supabase Error:", error); // Check Console for red text!
+            console.error("Supabase Error:", error);
             alert(`Save Failed: ${error.message}`);
         } else {
-            console.log("Saved Success:", data);
             alert("✅ Project Saved Successfully!"); 
             setShowSaveForm(false); 
             fetchProjects(); 
-            
-            // Clear the drawn shape from map
             if(featureGroupRef.current) featureGroupRef.current.clearLayers();
             setCurrentShape(null);
         }
@@ -188,6 +171,7 @@ const RealEstateSearchApp = () => {
         alert("Something went wrong processing the shape.");
     }
   };
+
   // ==========================================
   // 2. MAP LOGIC
   // ==========================================
@@ -195,11 +179,9 @@ const RealEstateSearchApp = () => {
   const MapClickHandler = () => {
     useMapEvents({
       click: (e) => {
-        // MARKETPLACE MODE: Ad Posting Logic
         if (viewMode === 'MARKETPLACE' && adMode) {
             setNewAdLocation(e.latlng);
         }
-        // ADMIN MODE: Radar Logic (Only if not drawing)
         else if (isAdmin && viewMode === 'MARKETPLACE') {
              const dists = GROWTH_NODES.map(node => {
                 const d = L.latLng(e.latlng).distanceTo([node.lat, node.lng]) / 1000;
@@ -212,22 +194,20 @@ const RealEstateSearchApp = () => {
     return null;
   };
 
-  // DRAWING HANDLERS (Leaflet Draw)
-  const onCreated = (e) => {
-      console.log("Shape Created", e);
-      setCurrentShape(e); // Store the shape in state so we can save it
-      setShowSaveForm(true); // Auto-open save form
+  // --- SEARCH PILOT: FLIES MAP TO RESULT ---
+  const FlyToSearchResult = () => {
+    const map = useMap();
+    useEffect(() => {
+      if (tempSearchMarker) {
+        map.flyTo(tempSearchMarker, 14, { duration: 1.5 });
+      }
+    }, [tempSearchMarker]);
+    return null;
   };
 
-  const onEdited = (e) => {
-      console.log("Shape Edited", e);
-      // In a real app, you would update the 'projects' state here if editing an existing project
-  };
-
-  const onDeleted = (e) => {
-      console.log("Shape Deleted", e);
-      setCurrentShape(null);
-  };
+  const onCreated = (e) => { setCurrentShape(e); setShowSaveForm(true); };
+  const onEdited = (e) => { console.log("Shape Edited", e); };
+  const onDeleted = (e) => { setCurrentShape(null); };
 
   // ==========================================
   // 3. PDF GENERATOR
@@ -306,15 +286,8 @@ const RealEstateSearchApp = () => {
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans text-gray-800">
       
-      {/* --- TOP BAR (GLOW MENU) --- */}
+      {/* --- TOP BAR --- */}
       <header className="bg-slate-900 px-4 py-3 flex justify-between items-center z-[2000] shadow-md text-white">
-        {/* Add this inside your <header> ... <div> */}
-<button 
-    onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=Help needed with the App`, '_blank')}
-    className="bg-green-600 text-white p-2 rounded-lg font-bold text-xs flex items-center gap-1"
->
-    <MessageCircle size={14}/> Support
-</button>
         <div className="flex items-center gap-3">
             <div className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-1.5 rounded-lg shadow-lg">
                 <Crosshair size={20} className="animate-spin-slow" />
@@ -325,26 +298,12 @@ const RealEstateSearchApp = () => {
             </div>
         </div>
         
-        {/* CENTER: MODE SWITCHER (The Glow Logic) */}
+        {/* CENTER: MODE SWITCHER */}
         <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700 backdrop-blur-md">
-            <button 
-                onClick={() => setViewMode('MARKETPLACE')} 
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
-                    viewMode==='MARKETPLACE' 
-                    ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-105' 
-                    : 'text-slate-400 hover:text-white'
-                }`}
-            >
+            <button onClick={() => setViewMode('MARKETPLACE')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${viewMode==='MARKETPLACE' ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-105' : 'text-slate-400 hover:text-white'}`}>
                 <Store size={14}/> Marketplace
             </button>
-            <button 
-                onClick={() => setViewMode('VENTURE')} 
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
-                    viewMode==='VENTURE' 
-                    ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.5)] scale-105' 
-                    : 'text-slate-400 hover:text-white'
-                }`}
-            >
+            <button onClick={() => setViewMode('VENTURE')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${viewMode==='VENTURE' ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.5)] scale-105' : 'text-slate-400 hover:text-white'}`}>
                 <PenTool size={14}/> Venture Planner
             </button>
         </div>
@@ -367,6 +326,13 @@ const RealEstateSearchApp = () => {
                     }}
                 />
             </div>
+            {/* SUPPORT BUTTON */}
+            <button 
+                onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=Hello Admin, I need help.`, '_blank')}
+                className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg font-bold text-xs flex items-center gap-1 transition-all"
+            >
+                <MessageCircle size={14}/> Support
+            </button>
 
             <button onClick={() => setShowPinModal(true)} className={`p-2 rounded-lg transition-all ${isAdmin ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
                 {isAdmin ? <Unlock size={16}/> : <Lock size={16}/>}
@@ -374,7 +340,7 @@ const RealEstateSearchApp = () => {
         </div>
       </header>
 
-      {/* --- SUB-TOOLBAR (CONTEXT AWARE) --- */}
+      {/* --- SUB-TOOLBAR --- */}
       <div className="bg-white border-b px-4 py-2 flex gap-3 items-center text-xs overflow-x-auto">
           {viewMode === 'MARKETPLACE' && (
               <>
@@ -390,7 +356,7 @@ const RealEstateSearchApp = () => {
           {viewMode === 'VENTURE' && (
               <>
                 <span className="font-bold text-orange-800 flex items-center gap-1"><PenTool size={12}/> PRO TOOLS:</span>
-                <span className="text-gray-500">Use the toolbar on the map to Draw, Edit, or Delete shapes.</span>
+                <span className="text-gray-500">Use toolbar on map to Draw.</span>
                 <button onClick={() => fetchProjects()} className="ml-2 px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"><Eye size={12}/> Refresh Projects</button>
               </>
           )}
@@ -401,6 +367,8 @@ const RealEstateSearchApp = () => {
         <MapContainer center={[17.0500, 78.5500]} zoom={13} style={{ height: "100%", width: "100%" }}>
           <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri" />
           
+          <FlyToSearchResult />
+
           {/* 1. MARKETPLACE LAYER */}
           {viewMode === 'MARKETPLACE' && marketAds.map((ad) => (
               <React.Fragment key={ad.id}>
@@ -422,26 +390,20 @@ const RealEstateSearchApp = () => {
               </React.Fragment>
           ))}
 
-          {/* 2. VENTURE PLANNER LAYER (PRO MODE) */}
+          {/* 2. VENTURE PLANNER LAYER */}
           {viewMode === 'VENTURE' && (
               <FeatureGroup ref={featureGroupRef}>
-                  {/* THIS IS THE MISSING MAGIC CODE - THE EDIT CONTROL */}
                   <EditControl 
                     position="topright" 
                     onCreated={onCreated} 
                     onEdited={onEdited} 
                     onDeleted={onDeleted}
                     draw={{
-                        rectangle: true,
-                        polygon: true,
-                        circle: false, 
-                        circlemarker: false,
-                        marker: false,
-                        polyline: true
+                        rectangle: false,
+                        polygon: { allowIntersection: false, showArea: false, metric: false },
+                        circle: false, circlemarker: false, marker: false, polyline: false
                     }}
                   />
-                  
-                  {/* RENDER SAVED PROJECTS */}
                   {projects.map(p => (
                       <Polygon key={p.id} positions={p.points} color={p.color || "cyan"} fillColor={p.color || "cyan"} fillOpacity={0.2}>
                           <Popup>
@@ -454,13 +416,10 @@ const RealEstateSearchApp = () => {
               </FeatureGroup>
           )}
 
-          {/* HELPERS */}
           {newAdLocation && <Marker position={newAdLocation} icon={DefaultIcon}><Popup>New Ad Location</Popup></Marker>}
           {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Result</Popup></Marker>}
-          
           <MapClickHandler />
           
-          {/* RADAR POPUP */}
           {radarResults && (
               <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
                   <div className="min-w-[180px]">
@@ -474,7 +433,6 @@ const RealEstateSearchApp = () => {
 
       {/* --- MODALS --- */}
       
-      {/* 1. ADMIN PIN MODAL */}
       {showPinModal && (
           <div className="fixed inset-0 bg-black/50 z-[9999] flex justify-center items-center backdrop-blur-sm">
               <div className="bg-white p-6 rounded-xl w-72">
@@ -485,7 +443,6 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
-      {/* 2. AD POSTING MODAL */}
       {newAdLocation && (
           <div className="fixed bottom-4 left-4 z-[5000] bg-white p-4 rounded-xl shadow-2xl w-80 border-2 border-blue-500 animate-in slide-in-from-bottom-10">
                <h3 className="font-bold text-blue-600 mb-2">Post New Ad</h3>
@@ -499,7 +456,6 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
-      {/* 3. SAVE PROJECT FORM (PRO VERSION) */}
       {showSaveForm && (
          <div className="fixed inset-0 bg-black/60 z-[6000] flex justify-center items-center">
              <div className="bg-white p-6 rounded-lg w-80 shadow-2xl animate-in fade-in">
@@ -520,7 +476,6 @@ const RealEstateSearchApp = () => {
          </div>
       )}
 
-      {/* 4. AUDIT / RATING MODAL (FULL VERSION) */}
       {showRatingModal && (
         <div className="fixed inset-0 bg-black/80 z-[7000] flex justify-center items-center p-4 backdrop-blur-sm">
             <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
@@ -529,7 +484,6 @@ const RealEstateSearchApp = () => {
                     <button onClick={() => setShowRatingModal(false)} className="hover:bg-white/20 p-1 rounded"><X size={20}/></button>
                 </div>
                 <div className="p-6 overflow-y-auto custom-scrollbar">
-                    {/* INPUTS FOR PDF */}
                     <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
                         <h3 className="text-xs font-black text-indigo-800 uppercase mb-3">1. Regulatory</h3>
                         <div className="grid grid-cols-2 gap-4 mb-3">
