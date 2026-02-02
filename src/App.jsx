@@ -46,10 +46,7 @@ const GROWTH_NODES = [
 ];
 
 const RealEstateSearchApp = () => {
-
-  // DEBUG LINE - DELETE THIS LATER
-  console.log("🔐 THE REQUIRED PIN IS:", `"${PIN_CODE}"`); // Quotes help us see hidden spaces
-  
+    
   // ... rest of your code ...    // --- GLOBAL STATE ---
   const [viewMode, setViewMode] = useState('MARKETPLACE'); 
   const [isAdmin, setIsAdmin] = useState(false);
