@@ -1,937 +1,556 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polygon, Circle, LayersControl, useMapEvents, useMap } from 'react-leaflet';
+import React, { useState, useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle, Polygon, FeatureGroup } from 'react-leaflet';
+import { EditControl } from "react-leaflet-draw"; // THE PRO DRAWING TOOL
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import "leaflet-draw/dist/leaflet.draw.css"; // DRAWING CSS
+import { createClient } from '@supabase/supabase-js';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable'; 
+
+// ICONS
 import { 
   X, Crosshair, Ruler, Upload, Download, Trash2, Globe, Copy, ExternalLink, 
   Search, Zap, Radar, FileText, Lock, Unlock, WifiOff, ArrowRight, Phone, 
   Map as MapIcon, Info, MessageCircle, Link, Building2, Store, Tag, HandCoins, 
-  CheckCircle, AlertTriangle, BookOpen, MousePointerClick,ShieldCheck, TrendingUp
+  CheckCircle, AlertTriangle, BookOpen, MousePointerClick, ChevronDown,
+  ShieldCheck, TrendingUp, Layers, PenTool, Save, Eye
 } from 'lucide-react';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-import { supabase } from './supabaseClient';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable'; // <--- CHANGE THIS LINE
 
-// --- CONFIGURATION (SECURE) ---
-const APP_PIN = import.meta.env.VITE_APP_PIN || "1234"; 
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
-const PRO_DOMAIN = import.meta.env.VITE_PRO_DOMAIN || "https://maps.safelanddeal.com";
+// --- CONFIGURATION ---
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
+const PIN_CODE = "1234"; 
 
-// --- ICONS ---
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-const EditIcon = L.divIcon({
-  className: 'custom-div-icon',
-  html: `<div style="background-color: white; border: 2px solid #ea580c; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
-  iconSize: [12, 12],
-  iconAnchor: [6, 6]
-});
-
-const SellIcon = L.divIcon({
-  className: 'custom-pin',
-  html: `<div style="background-color: #EAB308; border: 2px solid white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 14px;">💲</div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 28]
-});
-
-const LookIcon = L.divIcon({
-  className: 'custom-pin',
-  html: `<div style="background-color: #3B82F6; border: 2px solid white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 14px;">👀</div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 28]
-});
-
-let DefaultIcon = L.icon({ 
-  iconUrl: icon, 
-  shadowUrl: iconShadow, 
-  iconSize: [25, 41], 
-  iconAnchor: [12, 41] 
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// --- ICONS SETUP ---
+const DefaultIcon = L.icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// --- GROWTH NODES ---
+// --- GROWTH NODES (RADAR) ---
 const GROWTH_NODES = [
-  { name: "Bharat Future City", lat: 16.9850, lng: 78.6500 },
-  { name: "Amazon Data Center", lat: 17.0600, lng: 78.6300 },
-  { name: "RRR (Shadnagar)", lat: 17.0350, lng: 78.2100 },
-  { name: "RGIA Airport", lat: 17.2403, lng: 78.4294 },
-  { name: "Pharma Cluster", lat: 16.9500, lng: 78.6100 },
-  { name: "TCS Adibatla", lat: 17.2100, lng: 78.5300 }
+  { name: "Pharma Cluster", lat: 16.9800, lng: 78.6000 },
+  { name: "Amazon Data Center", lat: 17.0500, lng: 78.5500 },
+  { name: "Bharat Future City", lat: 16.9500, lng: 78.5800 },
+  { name: "TCS Adibatla", lat: 17.2100, lng: 78.5300 } 
 ];
 
-// --- UTILS ---
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; 
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + 
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return (R * c).toFixed(1);
-};
-
-const getDistanceMeters = (p1, p2) => {
-  const R = 6371e3; 
-  const φ1 = p1.lat * Math.PI/180;
-  const φ2 = p2.lat * Math.PI/180;
-  const Δφ = (p2.lat-p1.lat) * Math.PI/180;
-  const Δλ = (p2.lng-p1.lng) * Math.PI/180;
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-};
-
-const calculateAcres = (latLngs) => {
-  if (latLngs.length < 3) return 0;
-  const earthRadius = 6378137; 
-  let area = 0;
-  for (let i = 0; i < latLngs.length; i++) {
-    const j = (i + 1) % latLngs.length;
-    const p1 = latLngs[i];
-    const p2 = latLngs[j];
-    const lat1 = (p1.lat * Math.PI) / 180;
-    const lat2 = (p2.lat * Math.PI) / 180;
-    const lng1 = (p1.lng * Math.PI) / 180;
-    const lng2 = (p2.lng * Math.PI) / 180;
-    area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
-  }
-  area = (Math.abs(area) * earthRadius * earthRadius) / 2;
-  return area / 4046.86; 
-};
-
-const formatArea = (acresVal) => {
-  const ac = parseFloat(acresVal);
-  if (ac < 1.0) {
-    const sqYds = Math.round(ac * 4840);
-    return `${sqYds.toLocaleString()} Sq Yds`;
-  }
-  return `${ac.toFixed(2)} Ac`;
-};
-
-const generateSquare = (center, sqYds) => {
-    const areaM2 = sqYds * 0.836127;
-    const sideM = Math.sqrt(areaM2);
-    const halfSide = sideM / 2;
-    const dLat = halfSide / 111132;
-    const dLng = halfSide / (111132 * Math.cos(center.lat * Math.PI / 180));
-    return [
-        { lat: center.lat + dLat, lng: center.lng - dLng }, // TL
-        { lat: center.lat + dLat, lng: center.lng + dLng }, // TR
-        { lat: center.lat - dLat, lng: center.lng + dLng }, // BR
-        { lat: center.lat - dLat, lng: center.lng - dLng }  // BL
-    ];
-};
-
-const MapController = ({ center }) => {
-  const map = useMap();
-  useEffect(() => { 
-    if (center) map.flyTo(center, 18, { duration: 1.5 }); 
-  }, [center, map]);
-  return null;
-};
-
-// ==========================================
-// MAIN APP COMPONENT
-// ==========================================
 const RealEstateSearchApp = () => {
-  // --- STATE ---
-  const [leads, setLeads] = useState([]); 
-  const [filteredLeads, setFilteredLeads] = useState([]);
+  // --- GLOBAL STATE ---
+  const [viewMode, setViewMode] = useState('MARKETPLACE'); // 'MARKETPLACE' or 'VENTURE'
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [showPinModal, setShowPinModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Marketplace State
-  const [viewMode, setViewMode] = useState('VENTURES'); 
-  const [marketAds, setMarketAds] = useState([]);
+  const [tempSearchMarker, setTempSearchMarker] = useState(null);
+
+  // --- MARKETPLACE STATE ---
   const [adMode, setAdMode] = useState(null); 
   const [newAdLocation, setNewAdLocation] = useState(null);
-
-  // Measure/Edit State
-  const [measurePoints, setMeasurePoints] = useState([]); 
-  const [redoStack, setRedoStack] = useState([]); 
-  const [isMeasuring, setIsMeasuring] = useState(false);
-  const [editingLead, setEditingLead] = useState(null); 
-  const [tempArea, setTempArea] = useState(0);
-
-  // UI State
-  const [isRadarMode, setIsRadarMode] = useState(false);
+  const [marketAds, setMarketAds] = useState([]);
+  const [newAdData, setNewAdData] = useState({ type: 'SELL', size: '', price: '', contact: '', desc: '', size_unit: 'Sq Yds' });
   const [radarResults, setRadarResults] = useState(null);
-  const [projectBrochure, setProjectBrochure] = useState(null); 
-  const [activeContactNumber, setActiveContactNumber] = useState(ADMIN_PHONE);
-  const [isAdmin, setIsAdmin] = useState(false); 
-  const [showLogin, setShowLogin] = useState(false);
-  
-  const [showCoordsPanel, setShowCoordsPanel] = useState(false);
-  const [showToolsMenu, setShowToolsMenu] = useState(false);
-  const [showResources, setShowResources] = useState(false); 
+
+  // --- VENTURE PLANNER STATE (PRO VERSION) ---
+  const [projects, setProjects] = useState([]);
   const [showSaveForm, setShowSaveForm] = useState(false);
-  const [centerPos, setCenterPos] = useState({ lat: 17.1350, lng: 78.4300 }); 
-  const [tempSearchMarker, setTempSearchMarker] = useState(null); 
+  const [currentShape, setCurrentShape] = useState(null); // Stores the shape being drawn
+  const featureGroupRef = useRef(); // Reference to the drawing layer
 
-  const dragStartPos = useRef(null);
-  const fileInputRef = useRef(null);
-  const mapRef = useRef(null); 
+  // --- INVESTMENT AUDIT STATE ---
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingData, setRatingData] = useState({ 
+      price: '', govtValue: '', rera: '', approval: 'HMDA', orrDist: '', orrStatus: 'Out', 
+      bankLoan: false, devPace: 'Moderate', legal: 'Clear', zone: 'Residential', 
+      encumbrance: false, possession: false, linkDocs: false     
+  });
 
-  useEffect(() => { fetchLeads(); fetchMarketplaceAds(); }, []);
-  useEffect(() => { fetchMarketplaceAds(); }, [isAdmin]);
+  // --- INITIAL DATA LOAD ---
+  useEffect(() => {
+    fetchMarketplaceAds();
+    fetchProjects();
+  }, [isAdmin]);
 
-  // --- MARKETPLACE LOGIC ---
+  // ==========================================
+  // 1. DATABASE FUNCTIONS
+  // ==========================================
+  
+  // MARKETPLACE FETCH
   const fetchMarketplaceAds = async () => {
     try {
         let query = supabase.from('marketplace_ads').select('*');
         if (!isAdmin) query = query.eq('status', 'APPROVED');
-        const { data } = await query;
-        console.log("📢 FETCHED ADS:", data);
-        if (data) setMarketAds(data);
+        const { data, error } = await query;
+        if (!error) setMarketAds(data || []);
     } catch(e) { console.error(e); }
   };
 
-  const startPostAd = () => {
-      setAdMode('PICKING_LOC');
-      alert("📍 STEP 1: MARK LOCATION\n\n1. Move the map to the EXACT plot location.\n2. Tap the map to drop the marker.\n3. Click 'Confirm Location'.");
-  };
+  // POST AD
+  const handlePostAd = async () => {
+    if(!newAdLocation) return alert("Set location first.");
+    
+    // Auto-Calculate Polygon for Visuals
+    const sizeInSqMeters = parseInt(newAdData.size) * 0.836127; 
+    const sideLength = Math.sqrt(sizeInSqMeters); 
+    const offset = (sideLength / 2) / 111139; 
 
-  const confirmLocation = () => {
-      if(!newAdLocation) return alert("Please click on the map to mark the location first!");
-      setAdMode('FILLING_FORM');
-  };
+    const points = [
+        [newAdLocation.lat + offset, newAdLocation.lng - offset],
+        [newAdLocation.lat + offset, newAdLocation.lng + offset],
+        [newAdLocation.lat - offset, newAdLocation.lng + offset],
+        [newAdLocation.lat - offset, newAdLocation.lng - offset]
+    ];
 
-  const handlePostAd = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const type = formData.get('ad_type');
-    let points = null;
-    if(type === 'SELL') {
-        const sqYds = parseFloat(formData.get('size')) || 200;
-        points = generateSquare(newAdLocation, sqYds);
-    }
     const newAd = {
-        ad_type: type,
-        price: formData.get('price'),
-        size: formData.get('size'),
-        contact_info: formData.get('contact_info'),
-        description: formData.get('description'),
-        lat: newAdLocation.lat,
-        lng: newAdLocation.lng,
-        status: 'PENDING',
-        points: points,
-        radius: formData.get('radius')
+        lat: newAdLocation.lat, lng: newAdLocation.lng,
+        ad_type: newAdData.type, size: newAdData.size + ' ' + newAdData.size_unit,
+        price: newAdData.price, contact_info: newAdData.contact, description: newAdData.desc,
+        status: 'PENDING', points: points
     };
+
+    const { error } = await supabase.from('marketplace_ads').insert([newAd]);
+    if (!error) { 
+        alert("✅ Ad Submitted (Pending Approval)"); 
+        setAdMode(null); setNewAdLocation(null); fetchMarketplaceAds(); 
+    }
+  };
+
+  const handleApproveAd = async (id) => { await supabase.from('marketplace_ads').update({ status: 'APPROVED' }).eq('id', id); fetchMarketplaceAds(); };
+  const handleDeleteAd = async (id) => { await supabase.from('marketplace_ads').delete().eq('id', id); fetchMarketplaceAds(); };
+
+  // VENTURE PROJECTS FETCH
+  const fetchProjects = async () => {
     try {
-        const { error } = await supabase.from('marketplace_ads').insert([newAd]);
-        if (error) throw error;
-        fetchMarketplaceAds();
-        alert("✅ Ad Submitted Successfully!\n\nYour ad is now PENDING approval.\nAdmin will verify the location and publish it.");
-        setAdMode(null); setNewAdLocation(null);
-    } catch(err) { alert("Error submitting ad."); }
+      const { data } = await supabase.from('projects').select('*');
+      if (data) setProjects(data);
+    } catch (e) { console.error(e); }
   };
 
-  const handleApproveAd = async (adId) => {
-    if(!isAdmin) return;
-    if(!window.confirm("Approve this ad for public view?")) return;
-    await supabase.from('marketplace_ads').update({ status: 'APPROVED' }).eq('id', adId);
-    fetchMarketplaceAds();
-  };
-
-  const handleDeleteAd = async (adId) => {
-    if(!isAdmin) return;
-    if(!window.confirm("Delete this ad permanently?")) return;
-    await supabase.from('marketplace_ads').delete().eq('id', adId);
-    fetchMarketplaceAds();
-  };
-
-  // --- VENTURES / LEAD LOGIC ---
-  const handleSimplify = () => {
-    const simplified = measurePoints.filter((_, i) => i === 0 || i % 4 === 0 || i === measurePoints.length - 1);
-    setRedoStack([...redoStack, measurePoints]); setMeasurePoints(simplified); setTempArea(calculateAcres(simplified));
-  };
-
-  const handleEditShape = (lead) => {
-    if(!isAdmin) return;
-    setMeasurePoints(lead.points); setTempArea(lead.acres); setEditingLead(lead); setCenterPos(lead.center); setIsMeasuring(true); setShowCoordsPanel(true); setRedoStack([]);
-  };
-
-  const handleImport = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const json = JSON.parse(event.target.result);
-        const importedLeads = [];
-        if (json.type === 'FeatureCollection' && json.features) {
-           const allPoints = json.features.every(f => f.geometry.type === 'Point');
-           if (allPoints && json.features.length > 2) {
-               if(window.confirm(`Connect ${json.features.length} points?`)) {
-                   const pts = json.features.map(f => ({ lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }));
-                   const newLead = { id: Date.now(), label: "Imported", note: "Connected", acres: calculateAcres(pts), points: pts, center: pts[0] };
-                   importedLeads.push(newLead); saveToLocal(newLead);
-               }
-           } else {
-               if(!window.confirm(`Import ${json.features.length} items?`)) return;
-               for (const feature of json.features) {
-                  let raw = null;
-                  if (feature.geometry.type === 'Polygon') raw = feature.geometry.coordinates[0];
-                  else if (feature.geometry.type === 'LineString') raw = feature.geometry.coordinates;
-                  if (!raw) continue;
-                  const pts = raw.map(c => ({ lat: c[1], lng: c[0] }));
-                  if (pts.length > 1) {
-                     const newLead = { id: Date.now() + Math.random(), label: feature.properties?.Name || 'Track', note: 'Import', acres: calculateAcres(pts), points: pts, center: pts[0] };
-                     importedLeads.push(newLead); saveToLocal(newLead);
-                  }
-               }
-           }
-        }
-        if (importedLeads.length > 0) { setLeads(prev => [...importedLeads, ...prev]); alert("Imported successfully (Saved Locally)."); }
-      } catch (err) { alert("Error reading file."); }
-    };
-    reader.readAsText(file); e.target.value = null; 
-  };
-
-  const handleExportBackup = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(leads));
-    const a = document.createElement('a'); a.href = dataStr; a.download = `SatelliteScout_Backup_${new Date().toISOString().slice(0,10)}.json`; a.click();
-  };
-
-  const saveToLocal = (leadItem) => {
-    try {
-        const current = JSON.parse(localStorage.getItem('scout_leads_backup') || '[]');
-        const filtered = current.filter(l => l.id !== leadItem.id); filtered.push(leadItem);
-        localStorage.setItem('scout_leads_backup', JSON.stringify(filtered)); return true;
-    } catch(e) { return false; }
-  };
-
-  const handleSaveShape = async (e) => {
+  // --- ROBUST SAVE PROJECT FUNCTION ---
+  const handleSaveProject = async (e) => {
     e.preventDefault();
-    const formData = new FormData(e.target);
-    const leadData = { label: formData.get('label'), survey_no: formData.get('survey_no'), note: formData.get('note'), acres: tempArea, points: measurePoints, center: measurePoints[0] };
-    const finalId = editingLead ? editingLead.id : Date.now();
-    const finalLead = { ...leadData, id: finalId };
-    let savedToCloud = false;
+    if (!currentShape) return alert("No shape drawn!");
+
     try {
-        if (editingLead) {
-          const { error } = await supabase.from('scout_leads').update(leadData).eq('id', finalId);
-          if (!error) savedToCloud = true;
+        // 1. EXTRACT & CLEAN POINTS
+        // Leaflet Draw returns data differently for Polygons vs Rectangles.
+        // We normalize it here to always be a flat list of {lat, lng}.
+        const layer = currentShape.layer;
+        let rawLatLngs = layer.getLatLngs();
+
+        // If it's a Polygon (nested array), flatten it to get the outer ring
+        if (Array.isArray(rawLatLngs[0]) && typeof rawLatLngs[0].lat !== 'number') {
+            rawLatLngs = rawLatLngs[0];
+        }
+
+        // Convert to simple clean JSON objects
+        const cleanPoints = rawLatLngs.map(p => ({ lat: p.lat, lng: p.lng }));
+
+        console.log("Saving Points:", cleanPoints); // Debugging log
+
+        // 2. GATHER FORM DATA
+        const formData = new FormData(e.target);
+        const newProject = {
+            name: formData.get('label'),
+            survey_number: formData.get('survey_no'),
+            notes: formData.get('note'),
+            points: cleanPoints, // Send the clean JSON
+            color: 'cyan'
+        };
+        
+        // 3. SEND TO SUPABASE
+        const { data, error } = await supabase.from('projects').insert([newProject]).select();
+
+        if (error) {
+            console.error("Supabase Error:", error); // Check Console for red text!
+            alert(`Save Failed: ${error.message}`);
         } else {
-          const { error } = await supabase.from('scout_leads').insert([finalLead]);
-          if (!error) savedToCloud = true;
+            console.log("Saved Success:", data);
+            alert("✅ Project Saved Successfully!"); 
+            setShowSaveForm(false); 
+            fetchProjects(); 
+            
+            // Clear the drawn shape from map
+            if(featureGroupRef.current) featureGroupRef.current.clearLayers();
+            setCurrentShape(null);
         }
-    } catch (err) { console.warn("Cloud save failed, switching to local."); }
-    saveToLocal(finalLead);
-    if(editingLead) { setLeads(leads.map(l => l.id === finalId ? finalLead : l)); } else { setLeads([finalLead, ...leads]); }
-    finishSave();
-    if(savedToCloud) alert("Project Saved to Cloud!"); else alert("Project Saved Locally.");
+    } catch (err) {
+        console.error("Unexpected Error:", err);
+        alert("Something went wrong processing the shape.");
+    }
   };
-
-  const finishSave = () => { setMeasurePoints([]); setRedoStack([]); setIsMeasuring(false); setEditingLead(null); setShowSaveForm(false); setShowCoordsPanel(false); };
+  // ==========================================
+  // 2. MAP LOGIC
+  // ==========================================
   
-  const handleGeneratePDF = async () => {
-    const hasActiveDrawing = measurePoints.length > 2;
-    if(!radarResults && !editingLead && !hasActiveDrawing) return alert("Please Measure a land or run Growth Radar first.");
-    const mapElement = document.getElementById('map-print-container');
-    const canvas = await html2canvas(mapElement, { useCORS: true, allowTaint: true });
-    const imgData = canvas.toDataURL('image/png');
-    const doc = new jsPDF();
-    doc.setFillColor(79, 70, 229); 
-    doc.rect(0, 0, 210, 20, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.text("Safe Land Deal - Investment Insight", 10, 13);
-    doc.addImage(imgData, 'PNG', 10, 25, 190, 100);
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(14);
-    doc.text("Property Analysis", 10, 135);
-    doc.setFontSize(10);
-    let y = 145;
-    const target = editingLead || { label: "Draft", survey_no: "N/A", acres: tempArea, note: "Unsaved Draft" };
-    doc.text(`Label: ${target.label}`, 10, y); y+=6;
-    doc.text(`Survey No: ${target.survey_no || 'N/A'}`, 10, y); y+=6;
-    doc.text(`Area: ${formatArea(target.acres)}`, 10, y); y+=10;
-    if(target.note) {
-        doc.setFontSize(12); doc.setTextColor(0, 0, 150); doc.text("Notes:", 10, y); y+=6;
-        doc.setFontSize(10); doc.setTextColor(0,0,0);
-        const splitNotes = doc.splitTextToSize(target.note, 190);
-        doc.text(splitNotes, 10, y); y += (splitNotes.length * 5) + 10;
-    }
-    if(radarResults) {
-        doc.setFontSize(12); doc.setTextColor(220, 38, 38); doc.text("Growth Radar Data:", 10, y); y+=8;
-        doc.setTextColor(0,0,0); doc.setFontSize(10);
-        radarResults.nodes.forEach(node => { doc.text(`${node.name}: ${node.dist} km`, 10, y); y+=6; });
-    }
-    doc.save("Report.pdf");
-  };
-
-  const handleExternalSearch = async () => {
-    const coordRegex = /(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/;
-    const match = searchQuery.match(coordRegex);
-    if (match) {
-        const lat = parseFloat(match[1]); const lng = parseFloat(match[2]);
-        setCenterPos({ lat, lng }); setTempSearchMarker({ lat, lng }); setSearchQuery(''); return;
-    } 
-    try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
-        const data = await response.json();
-        if(data && data.length > 0) {
-            const lat = parseFloat(data[0].lat); const lng = parseFloat(data[0].lon);
-            setCenterPos({ lat, lng }); setTempSearchMarker({ lat, lng }); setSearchQuery('');
-        } else { alert("Address not found."); }
-    } catch(err) { alert("Search failed."); }
-  };
-
-  const fetchLeads = async () => {
-    try {
-        const { data } = await supabase.from('scout_leads').select('*').order('created_at', { ascending: false });
-        if (data) setLeads(data);
-        setFilteredLeads(data || []);
-    } catch (err) { console.log("Offline or Error"); }
-  };
-
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if(e.target.pin.value === APP_PIN) { setIsAdmin(true); setShowLogin(false); } 
-    else { alert("Incorrect PIN"); }
-  };
-
-  const handleWhatsApp = () => {
-    window.open(`https://wa.me/${activeContactNumber}?text=Hello, I want a ground report.`, '_blank');
-  };
-
-  const handleCopyLink = (id) => {
-      const url = `${PRO_DOMAIN}/?id=${id}`;
-      navigator.clipboard.writeText(url);
-      alert("Link Copied!");
-  };
-
-  const handlePasteCoords = (e) => {
-      const input = e.target.value;
-      const coordRegex = /(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/;
-      const match = input.match(coordRegex);
-      if(match) {
-          const lat = parseFloat(match[1]); const lng = parseFloat(match[2]);
-          const loc = { lat, lng }; setNewAdLocation(loc); setCenterPos(loc);
-      }
-  };
-
-  // --- MAP CLICK HANDLER ---
   const MapClickHandler = () => {
     useMapEvents({
-      click(e) {
-        if(adMode === 'PICKING_LOC') {
+      click: (e) => {
+        // MARKETPLACE MODE: Ad Posting Logic
+        if (viewMode === 'MARKETPLACE' && adMode) {
             setNewAdLocation(e.latlng);
-        } else if (isMeasuring && isAdmin) {
-            const newPoints = [...measurePoints, e.latlng]; setMeasurePoints(newPoints); setTempArea(calculateAcres(newPoints)); setShowCoordsPanel(true);
-        } else if (isRadarMode && isAdmin) {
-            const { lat, lng } = e.latlng;
-            const distances = GROWTH_NODES.map(node => ({ ...node, dist: calculateDistance(lat, lng, node.lat, node.lng) })).sort((a,b) => parseFloat(a.dist) - parseFloat(b.dist));
-            setRadarResults({ pos: e.latlng, nodes: distances.slice(0, 4) }); 
-        } else {
-            setShowToolsMenu(false);
         }
-      },
+        // ADMIN MODE: Radar Logic (Only if not drawing)
+        else if (isAdmin && viewMode === 'MARKETPLACE') {
+             const dists = GROWTH_NODES.map(node => {
+                const d = L.latLng(e.latlng).distanceTo([node.lat, node.lng]) / 1000;
+                return { name: node.name, dist: d.toFixed(1) };
+            }).sort((a,b) => a.dist - b.dist);
+            setRadarResults({ pos: e.latlng, nodes: dists });
+        }
+      }
     });
     return null;
   };
 
-  const DraggableMarker = () => {
-    const markerRef = useRef(null);
-    const eventHandlers = useMemo(() => ({ dragend(e) { setCenterPos(e.target.getLatLng()); }, }), []); 
-    return <Marker draggable={true} eventHandlers={eventHandlers} position={centerPos} ref={markerRef}><Popup>Search Center</Popup></Marker>;
+  // DRAWING HANDLERS (Leaflet Draw)
+  const onCreated = (e) => {
+      console.log("Shape Created", e);
+      setCurrentShape(e); // Store the shape in state so we can save it
+      setShowSaveForm(true); // Auto-open save form
   };
-  const DraggableVertex = ({ position, index }) => {
-    const markerRef = useRef(null);
-    const eventHandlers = useMemo(() => ({ drag(e) { const u=[...measurePoints]; u[index]=e.latlng; setMeasurePoints(u); setTempArea(calculateAcres(u)); }, }), [index]);
-    return <Marker draggable={true} eventHandlers={eventHandlers} position={position} icon={EditIcon} ref={markerRef}><Popup>Pt {index + 1}</Popup></Marker>;
+
+  const onEdited = (e) => {
+      console.log("Shape Edited", e);
+      // In a real app, you would update the 'projects' state here if editing an existing project
   };
-  // --- INVESTMENT RATING STATE ---
-  const [showRatingModal, setShowRatingModal] = useState(false);
-  // --- PDF REPORT GENERATOR FUNCTION ---
+
+  const onDeleted = (e) => {
+      console.log("Shape Deleted", e);
+      setCurrentShape(null);
+  };
+
+  // ==========================================
+  // 3. PDF GENERATOR
+  // ==========================================
   const generatePDF = () => {
     const doc = new jsPDF();
     const date = new Date().toLocaleDateString();
 
-    // 1. HEADER (Branding)
-    doc.setFillColor(20, 30, 40); // Dark Blue Header
-    doc.rect(0, 0, 210, 40, 'F');
+    doc.setFillColor(25, 25, 112); 
+    doc.rect(0, 0, 210, 45, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24); doc.setFont("helvetica", "bold");
     doc.text("SAFE LAND DEAL", 15, 20);
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text("Investment Intelligence Report", 15, 30);
-    doc.text(`Date: ${date}`, 160, 30);
+    doc.setFontSize(10); doc.text("TELANGANA INVESTMENT AUDIT REPORT", 15, 30);
+    doc.text(`Generated: ${date}`, 160, 30);
 
-    // 2. FINANCIALS SECTION
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text("1. Financial Analysis", 15, 55);
-    
+    doc.setTextColor(0, 0, 0); doc.setFontSize(14); doc.setFont("helvetica", "bold");
+    doc.text("1. Regulatory & Zoning Analysis", 15, 60);
+
     autoTable(doc, {
-      startY: 60,
-      head: [['Metric', 'Value', 'Verdict']],
+      startY: 65,
+      head: [['Check', 'Status', 'Impact']],
       body: [
-        ['Asking Price', `Rs ${ratingData.price} / SqYd`, parseInt(ratingData.price) > parseInt(ratingData.govtValue)*3 ? 'Premium' : 'Fair Market'],
-        ['Govt (SRO) Value', `Rs ${ratingData.govtValue} / SqYd`, '-'],
+        ['Authority', ratingData.approval, ratingData.approval === 'HMDA' ? 'High Security' : 'Standard'],
+        ['RERA Status', ratingData.rera ? `Registered (${ratingData.rera})` : 'Not Available', ratingData.rera ? 'High Trust' : 'Verify'],
+        ['Bank Loan', ratingData.bankLoan ? 'Available' : 'Not Confirmed', ratingData.bankLoan ? 'Positive' : 'Neutral'],
+        ['Zone Type', ratingData.zone, 'Verified']
       ],
-      theme: 'striped',
-      headStyles: { fillColor: [41, 128, 185] }
+      theme: 'grid', headStyles: { fillColor: [46, 204, 113] }
     });
 
-    // 3. LEGAL CHECKLIST
-    const currentY = doc.lastAutoTable.finalY + 15;
-    doc.setFontSize(14);
-    doc.text("2. Legal Health Check", 15, currentY);
-    
-    const legalData = [
-      [`30-Year EC Verified`, ratingData.encumbrance ? "YES (Verified)" : "NO (Pending)"],
-      [`Link Docs Flow`, ratingData.linkDocs ? "YES (Verified)" : "NO (Pending)"],
-      [`Physical Possession`, ratingData.possession ? "YES (Confirmed)" : "NO (Pending)"]
-    ];
-
+    const locY = doc.lastAutoTable.finalY + 15;
+    doc.text("2. Location & Connectivity", 15, locY);
     autoTable(doc, {
-      startY: currentY + 5,
-      body: legalData,
-      theme: 'grid',
-      styles: { fontSize: 11 },
-      columnStyles: { 1: { fontStyle: 'bold', textColor: [0, 100, 0] } } // Green text for YES
+      startY: locY + 5,
+      body: [
+        ['ORR Connectivity', ratingData.orrStatus === 'Out' ? 'Outside Ring Road' : 'Growth Corridor'],
+        ['Distance to ORR', `${ratingData.orrDist} KM`],
+        ['Development Pace', ratingData.devPace, ratingData.devPace === 'Rapid' ? 'Fast Appreciation' : 'Long Term Hold']
+      ], theme: 'striped'
     });
 
-    // 4. THE SCORE
-    const scoreY = doc.lastAutoTable.finalY + 20;
-    doc.setDrawColor(0);
-    doc.setFillColor(240, 240, 240);
-    doc.roundedRect(15, scoreY, 180, 40, 3, 3, 'FD');
-    
-    doc.setFontSize(16);
-    doc.setTextColor(50, 50, 50);
-    doc.text("Safe Land Score™", 25, scoreY + 15);
-    
-    // Calculate Score Again for PDF
-    let score = 50; 
-    if(ratingData.encumbrance) score += 15;
-    if(ratingData.linkDocs) score += 10;
-    if(ratingData.possession) score += 10;
-    if(ratingData.zone === 'Commercial' || ratingData.zone === 'Residential') score += 10;
-    if(ratingData.zone === 'Agri') score -= 20;
-    if(ratingData.govtValue && (ratingData.price > ratingData.govtValue * 3)) score -= 15;
+    const finY = doc.lastAutoTable.finalY + 15;
+    doc.text("3. Financial Valuation", 15, finY);
+    autoTable(doc, {
+      startY: finY + 5, head: [['Metric', 'Value']],
+      body: [
+        ['Asking Price', `Rs ${ratingData.price} / SqYd`],
+        ['Govt Value', `Rs ${ratingData.govtValue} / SqYd`],
+        ['Est. Market Delta', `${Math.round((ratingData.price - ratingData.govtValue)/ratingData.govtValue * 100)}% above SRO`]
+      ], theme: 'plain'
+    });
+
+    let score = 40; 
+    if(ratingData.approval === 'HMDA') score += 20;
+    if(ratingData.approval === 'DTCP') score += 15;
+    if(ratingData.rera) score += 10;
+    if(ratingData.bankLoan) score += 10;
+    if(ratingData.devPace === 'Rapid') score += 10;
+    if(ratingData.approval === 'Unapproved') score -= 30;
     const finalScore = Math.min(99, Math.max(10, score));
 
-    doc.setFontSize(30);
-    doc.setTextColor(finalScore > 75 ? 0 : 200, finalScore > 75 ? 150 : 0, 0); // Green if high, Red if low
-    doc.text(`${finalScore}/100`, 25, scoreY + 30);
-    
-    doc.setFontSize(12);
-    doc.setTextColor(100, 100, 100);
-    doc.text(finalScore > 75 ? "Strong Buy Recommendation" : "High Risk - Due Diligence Required", 80, scoreY + 25);
+    const scoreY = doc.lastAutoTable.finalY + 20;
+    doc.setFillColor(240, 240, 240); doc.roundedRect(15, scoreY, 180, 30, 3, 3, 'FD');
+    doc.setFontSize(20); doc.setTextColor(finalScore > 70 ? 0 : 200, finalScore > 70 ? 100 : 0, 0);
+    doc.text(`${finalScore}/100`, 160, scoreY + 22);
+    doc.setFontSize(12); doc.setTextColor(50,50,50);
+    doc.text("SAFE LAND SCORE™", 25, scoreY + 18);
 
-    // 5. DISCLAIMER FOOTER
-    doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.text("Generated by Safe Land Deal AI. This report is for informational purposes only.", 105, 280, { align: 'center' });
-
-    // SAVE FILE
-    doc.save(`SafeLand_Report_${date.replace(/\//g, '-')}.pdf`);
+    doc.save(`Audit_Report_${date}.pdf`);
   };
-  
-  // REPLACE the old ratingData line with this new detailed one:
-  const [ratingData, setRatingData] = useState({ 
-      price: '', 
-      govtValue: '', 
-      legal: 'Clear', 
-      zone: 'Residential', 
-      encumbrance: false, // EC Verified?
-      possession: false,  // Spot Possession Verified?
-      linkDocs: false     // Link Documents Verified?
-  });
+
   // ==========================================
-  // RENDER UI
+  // 4. MAIN RENDER
   // ==========================================
   return (
-    <div className="min-h-screen bg-gray-50 font-sans flex flex-col overflow-hidden">
+    <div className="flex flex-col h-screen bg-gray-50 font-sans text-gray-800">
       
-      {/* HEADER */}
-      <div className="bg-white shadow-md p-4 z-[5000] relative flex flex-col md:flex-row justify-between items-center gap-4 shrink-0">
-        <div><h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Crosshair className="text-red-600"/> Safe Land Deal</h1></div>
-
-        {/* MODE TOGGLE */}
-        {!adMode && (
-        <div className="flex bg-gray-100 rounded-lg p-1 border border-gray-200">
-            <button onClick={() => setViewMode('VENTURES')} className={`px-3 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-all ${viewMode === 'VENTURES' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}><Building2 size={14}/> Ventures</button>
-            <button onClick={() => setViewMode('MARKETPLACE')} className={`px-3 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-all ${viewMode === 'MARKETPLACE' ? 'bg-white shadow text-orange-600' : 'text-gray-500'}`}><Store size={14}/> Marketplace</button>
-        </div>
-        )}
-
-        {/* ACTIONS */}
-        {!adMode && (
-        <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center bg-gray-100 rounded-lg px-2 border">
-                <Search size={14} className="text-gray-500"/>
-                <input className="bg-transparent border-none outline-none text-sm p-1 w-32" placeholder="Search..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
-                <button onClick={handleExternalSearch} className="text-blue-600 font-bold px-2">GO</button>
+      {/* --- TOP BAR (GLOW MENU) --- */}
+      <header className="bg-slate-900 px-4 py-3 flex justify-between items-center z-[2000] shadow-md text-white">
+        <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-1.5 rounded-lg shadow-lg">
+                <Crosshair size={20} className="animate-spin-slow" />
             </div>
-            
-            {viewMode === 'MARKETPLACE' && (
-              <button onClick={startPostAd} className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 text-white rounded-lg text-sm font-bold hover:bg-orange-700 animate-pulse shadow-lg shadow-orange-200"><Tag size={14}/> Post Ad</button>
-            )}
-            
-            <button onClick={handleWhatsApp} className="p-2 bg-green-100 text-green-700 rounded-lg border border-green-200 font-bold flex items-center gap-2"><MessageCircle size={20}/> <span className="hidden md:inline text-sm">Contact</span></button>
-            
-            {isAdmin ? (
-               <>
-               {viewMode === 'VENTURES' && (
-               <>
-                <button onClick={() => { setIsRadarMode(!isRadarMode); setIsMeasuring(false); }} className={`p-2 rounded border ${isRadarMode ? 'bg-purple-100 text-purple-700' : 'bg-white'}`}><Radar size={16}/></button>
-                <button onClick={() => setShowRatingModal(true)} className="p-2 bg-yellow-100 text-yellow-700 border border-yellow-300 rounded hover:bg-yellow-200 font-bold flex items-center gap-1"><Zap size={16}/> Rate</button>
-                <button onClick={handleGeneratePDF} className="p-2 text-red-600 border rounded bg-white"><FileText size={16}/></button>
-                <button onClick={() => { setIsMeasuring(!isMeasuring); if(!isMeasuring) { setMeasurePoints([]); setRedoStack([]); } }} className={`p-2 rounded border ${isMeasuring ? 'bg-orange-500 text-white' : 'bg-white'}`}><Ruler size={16}/></button>
-                <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-600 border rounded"><Upload size={16}/></button> <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" />
-                <button onClick={handleExportBackup} className="p-2 text-gray-600 border rounded"><Download size={16}/></button>
-               </>
-               )}
-               <button onClick={() => setIsAdmin(false)} className="p-2 text-red-400 border rounded"><Unlock size={16}/></button>
-               </>
-            ) : ( <button onClick={() => setShowLogin(true)} className="p-2 bg-gray-800 text-white rounded"><Lock size={16}/></button> )}
-            
-            <button onClick={() => setShowResources(true)} className="p-2 text-blue-600 border rounded bg-white"><BookOpen size={16}/></button>
-            <div className="relative">
-                <button onClick={() => setShowToolsMenu(!showToolsMenu)} className="p-2 border rounded bg-white"><Globe size={16}/></button>
-                {showToolsMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded shadow-xl border p-2 z-[5001]">
-                   <button onClick={() => { window.open(`https://earth.google.com/web/@${centerPos.lat},${centerPos.lng},1000a,3000d,35y,0h,0t,0r`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">Google Earth</button>
-                   <button onClick={() => { window.open(`https://bhuvan.nrsc.gov.in/ngmaps#17/${centerPos.lat}/${centerPos.lng}`, '_blank'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">Bhuvan</button>
-                   <button onClick={() => { navigator.clipboard.writeText(`${centerPos.lat}, ${centerPos.lng}`); alert('Copied!'); setShowToolsMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">Copy Coords</button>
-                </div>
-                )}
+            <div>
+                <h1 className="text-lg font-black tracking-tighter leading-none">SAFE LAND</h1>
+                <p className="text-[9px] text-gray-400 tracking-widest uppercase">Intelligence Console</p>
             </div>
         </div>
-        )}
+        
+        {/* CENTER: MODE SWITCHER (The Glow Logic) */}
+        <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700 backdrop-blur-md">
+            <button 
+                onClick={() => setViewMode('MARKETPLACE')} 
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
+                    viewMode==='MARKETPLACE' 
+                    ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-105' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+            >
+                <Store size={14}/> Marketplace
+            </button>
+            <button 
+                onClick={() => setViewMode('VENTURE')} 
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
+                    viewMode==='VENTURE' 
+                    ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.5)] scale-105' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+            >
+                <PenTool size={14}/> Venture Planner
+            </button>
+        </div>
+
+        <div className="flex gap-2 items-center">
+            {/* SEARCH */}
+            <div className="hidden md:flex bg-slate-800 px-3 py-1.5 rounded-full items-center gap-2 border border-slate-700 focus-within:border-blue-500">
+                <Search size={14} className="text-gray-400"/>
+                <input 
+                    placeholder="Find location..." 
+                    className="bg-transparent outline-none text-sm w-32 text-white placeholder-gray-500"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={async (e) => {
+                        if(e.key === 'Enter'){
+                            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}`);
+                            const data = await res.json();
+                            if(data && data[0]) setTempSearchMarker([data[0].lat, data[0].lon]);
+                        }
+                    }}
+                />
+            </div>
+
+            <button onClick={() => setShowPinModal(true)} className={`p-2 rounded-lg transition-all ${isAdmin ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                {isAdmin ? <Unlock size={16}/> : <Lock size={16}/>}
+            </button>
+        </div>
+      </header>
+
+      {/* --- SUB-TOOLBAR (CONTEXT AWARE) --- */}
+      <div className="bg-white border-b px-4 py-2 flex gap-3 items-center text-xs overflow-x-auto">
+          {viewMode === 'MARKETPLACE' && (
+              <>
+                <span className="font-bold text-blue-800 flex items-center gap-1"><Store size={12}/> MARKET TOOLS:</span>
+                <button onClick={() => { if(!adMode) { setAdMode('SELL'); alert("Click map to place ad"); } else { setAdMode(null); setNewAdLocation(null); } }} 
+                    className={`px-3 py-1 rounded border font-bold ${adMode ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                    {adMode ? 'Cancel Posting' : '+ Post Ad'}
+                </button>
+                {isAdmin && <button onClick={() => setShowRatingModal(true)} className="px-3 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 font-bold flex items-center gap-1"><Zap size={12}/> Investment Audit</button>}
+              </>
+          )}
+
+          {viewMode === 'VENTURE' && (
+              <>
+                <span className="font-bold text-orange-800 flex items-center gap-1"><PenTool size={12}/> PRO TOOLS:</span>
+                <span className="text-gray-500">Use the toolbar on the map to Draw, Edit, or Delete shapes.</span>
+                <button onClick={() => fetchProjects()} className="ml-2 px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"><Eye size={12}/> Refresh Projects</button>
+              </>
+          )}
       </div>
 
-      {showLogin && ( <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs"><h2 className="text-xl font-bold mb-4 text-center">Enter Access PIN</h2><form onSubmit={handleLogin} className="space-y-3"><input type="password" name="pin" className="w-full border p-2 rounded text-center text-2xl tracking-widest" autoFocus placeholder="****" /><div className="flex gap-2"><button type="button" onClick={() => setShowLogin(false)} className="flex-1 py-2 bg-gray-100 rounded">Cancel</button><button type="submit" className="flex-1 bg-black text-white py-2 rounded font-bold">Unlock</button></div></form></div></div> )}
+      {/* --- MAP AREA --- */}
+      <div className="flex-1 relative z-0">
+        <MapContainer center={[17.0500, 78.5500]} zoom={13} style={{ height: "100%", width: "100%" }}>
+          <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri" />
+          
+          {/* 1. MARKETPLACE LAYER */}
+          {viewMode === 'MARKETPLACE' && marketAds.map((ad) => (
+              <React.Fragment key={ad.id}>
+                  <Marker position={[ad.lat, ad.lng]} icon={DefaultIcon}>
+                    <Popup className="premium-popup">
+                        <div className="min-w-[200px]">
+                            <img src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60" className="w-full h-24 object-cover rounded-t-lg"/>
+                            <div className="p-3">
+                                <h3 className="font-bold text-lg text-green-700">{ad.price}</h3>
+                                <p className="text-xs text-gray-500 mb-2">{ad.size}</p>
+                                <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="w-full bg-green-600 text-white py-1 rounded text-xs font-bold mb-1">WhatsApp Owner</button>
+                                <button onClick={() => window.open(`https://earthengine.google.com/timelapse#v=${ad.lat},${ad.lng},11,latLng&t=1.50`, '_blank')} className="w-full bg-indigo-50 text-indigo-700 py-1 rounded text-xs font-bold border border-indigo-200">View History</button>
+                                {isAdmin && <button onClick={() => handleDeleteAd(ad.id)} className="w-full mt-2 text-red-500 text-[10px] underline">Delete Ad</button>}
+                            </div>
+                        </div>
+                    </Popup>
+                  </Marker>
+                  {ad.points && <Polygon positions={ad.points} pathOptions={{ color: 'yellow', fillColor: 'yellow', fillOpacity: 0.2 }} />}
+              </React.Fragment>
+          ))}
+
+          {/* 2. VENTURE PLANNER LAYER (PRO MODE) */}
+          {viewMode === 'VENTURE' && (
+              <FeatureGroup ref={featureGroupRef}>
+                  {/* THIS IS THE MISSING MAGIC CODE - THE EDIT CONTROL */}
+                  <EditControl 
+                    position="topright" 
+                    onCreated={onCreated} 
+                    onEdited={onEdited} 
+                    onDeleted={onDeleted}
+                    draw={{
+                        rectangle: true,
+                        polygon: true,
+                        circle: false, 
+                        circlemarker: false,
+                        marker: false,
+                        polyline: true
+                    }}
+                  />
+                  
+                  {/* RENDER SAVED PROJECTS */}
+                  {projects.map(p => (
+                      <Polygon key={p.id} positions={p.points} color={p.color || "cyan"} fillColor={p.color || "cyan"} fillOpacity={0.2}>
+                          <Popup>
+                              <strong>{p.name}</strong><br/>
+                              Survey: {p.survey_number}<br/>
+                              {p.notes}
+                          </Popup>
+                      </Polygon>
+                  ))}
+              </FeatureGroup>
+          )}
+
+          {/* HELPERS */}
+          {newAdLocation && <Marker position={newAdLocation} icon={DefaultIcon}><Popup>New Ad Location</Popup></Marker>}
+          {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Result</Popup></Marker>}
+          
+          <MapClickHandler />
+          
+          {/* RADAR POPUP */}
+          {radarResults && (
+              <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}>
+                  <div className="min-w-[180px]">
+                      <div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-xs"><Radar size={12} className="inline"/> Growth Radar</div>
+                      {radarResults.nodes.map((n,i)=><div key={i} className="flex justify-between text-xs border-b py-1"><span>{n.name}</span><b>{n.dist} km</b></div>)}
+                  </div>
+              </Popup>
+          )}
+        </MapContainer>
+      </div>
+
+      {/* --- MODALS --- */}
       
-      {showResources && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[6000] flex justify-center items-center p-4 backdrop-blur-sm"><div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen/> Investor Knowledge Base</h2><button onClick={() => setShowResources(false)}><X/></button></div><div className="space-y-6"><div><h3 className="font-bold mb-2">Government Portals</h3><div className="grid grid-cols-2 gap-2 text-sm"><a href="https://registration.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">IGRS (EC Check)</a><a href="https://bhubharati.telangana.gov.in/" target="_blank" className="p-2 border rounded hover:bg-blue-50 text-blue-700 font-bold">Bhubharati (Land Status)</a></div></div></div></div></div> )}
-
-      {/* --- BROCHURE MODAL --- */}
-      {projectBrochure && (
-        <div className="fixed inset-0 bg-white z-[6000] flex flex-col md:flex-row overflow-hidden">
-            <div className="w-full md:w-1/3 bg-slate-50 border-r border-gray-200 overflow-y-auto relative flex flex-col">
-                <div className="bg-slate-900 p-6 text-white relative">
-                   <button onClick={() => setProjectBrochure(null)} className="absolute top-4 right-4 bg-white/20 p-2 rounded-full hover:bg-white/30 text-white"><X size={20}/></button>
-                   <h1 className="text-2xl font-bold leading-tight">{projectBrochure.label}</h1>
-                   <div className="flex items-center gap-2 mt-2 text-slate-300 text-sm"><MapIcon size={14}/> <span>{projectBrochure.survey_no || "Location Not Specified"}</span></div>
-                </div>
-                <div className="p-6 flex-1">
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-6">
-                        <h3 className="font-bold text-gray-400 text-xs uppercase mb-3"><Zap size={12}/> Highlights</h3>
-                        <div className="text-sm text-gray-700 whitespace-pre-wrap">{projectBrochure.note || "No details."}</div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white p-4 rounded-xl shadow-sm border text-center"><div className="text-xs text-gray-400 font-bold uppercase mb-1">Total Area</div><div className="text-xl font-bold text-slate-800">{formatArea(projectBrochure.acres)}</div></div>
-                        <button onClick={() => window.open(`https://wa.me/${activeContactNumber}?text=I am interested in ${projectBrochure.label}`, '_blank')} className="bg-green-600 text-white rounded-xl flex flex-col items-center justify-center p-2 font-bold hover:bg-green-700 shadow-lg shadow-green-200"><MessageCircle size={24} className="mb-1"/><span>Enquire Now</span></button>
-                    </div>
-                </div>
-            </div>
-            <div className="flex-1 relative bg-gray-100">
-                <button onClick={() => setProjectBrochure(null)} className="absolute top-4 right-4 bg-white p-2 rounded-lg shadow z-[7000] md:hidden font-bold text-xs">Close</button>
-                <div className="absolute inset-0 flex items-center justify-center text-gray-400">(Map View Hidden)</div>
-            </div>
-        </div>
-      )}
-
-      {/* --- STEP 1: PICK LOCATION OVERLAY --- */}
-      {adMode === 'PICKING_LOC' && (
-          <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-[4000] bg-white px-4 py-2 rounded-full shadow-xl border-2 border-orange-500 flex items-center gap-4 animate-bounce">
-              <div className="text-sm font-bold text-orange-700 flex items-center gap-2"><MousePointerClick size={16}/> Tap Map to Set Location</div>
-              <button onClick={confirmLocation} className="bg-orange-600 text-white px-4 py-1 rounded-full text-sm font-bold shadow hover:bg-orange-700">Confirm Location</button>
-              <button onClick={() => { setAdMode(null); setNewAdLocation(null); }} className="text-gray-400 hover:text-red-500"><X size={16}/></button>
+      {/* 1. ADMIN PIN MODAL */}
+      {showPinModal && (
+          <div className="fixed inset-0 bg-black/50 z-[9999] flex justify-center items-center backdrop-blur-sm">
+              <div className="bg-white p-6 rounded-xl w-72">
+                  <h3 className="font-bold mb-4">Admin Login</h3>
+                  <input type="password" value={pinInput} onChange={(e)=>setPinInput(e.target.value)} className="w-full border p-2 rounded mb-4 text-center tracking-widest" placeholder="PIN"/>
+                  <button onClick={()=>{ if(pinInput===PIN_CODE){ setIsAdmin(true); setShowPinModal(false); } else alert("Wrong PIN"); }} className="w-full bg-black text-white py-2 rounded font-bold">Unlock</button>
+              </div>
           </div>
       )}
 
-      {/* --- STEP 2: POST AD FORM --- */}
-      {adMode === 'FILLING_FORM' && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-[6000] flex justify-center items-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div className="bg-orange-600 p-4 text-white flex justify-between items-center"><h2 className="font-bold flex items-center gap-2"><Store size={20}/> Post Ad</h2><button onClick={() => setAdMode(null)} className="hover:bg-white/20 p-1 rounded"><X size={20}/></button></div>
-                <div className="p-6 overflow-y-auto max-h-[80vh]">
-                    <div className="bg-green-50 border-l-4 border-green-500 p-3 mb-4 text-xs text-green-700"><p className="font-bold">✅ Location Locked:</p>{newAdLocation.lat.toFixed(6)}, {newAdLocation.lng.toFixed(6)}</div>
-                    <form onSubmit={handlePostAd} className="space-y-3">
-                        <div className="mb-2"><label className="text-xs font-bold text-gray-500">Paste Coordinates (Optional)</label><div className="flex gap-2"><input onChange={handlePasteCoords} placeholder="e.g. 17.123, 78.123" className="w-full border p-2 rounded text-xs bg-gray-50"/><button type="button" className="text-xs bg-gray-200 px-2 rounded font-bold" onClick={() => alert("Copied coordinates will move the pin position.")}>Help</button></div></div>
-                        <div><label className="block text-xs font-bold text-gray-500 mb-1">Type</label><div className="flex gap-2"><label className="flex-1 border rounded-lg p-2 flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 has-[:checked]:bg-yellow-50 has-[:checked]:border-yellow-500 has-[:checked]:text-yellow-700"><input type="radio" name="ad_type" value="SELL" defaultChecked className="hidden"/><Tag size={16}/> SELL Plot</label><label className="flex-1 border rounded-lg p-2 flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 has-[:checked]:text-blue-700"><input type="radio" name="ad_type" value="LOOKING" className="hidden"/><HandCoins size={16}/> Looking For</label></div></div>
-                        <div><label className="text-xs font-bold text-gray-500">Size (Sq Yds)</label><input name="size" required placeholder="e.g. 200" className="w-full border p-2 rounded text-sm"/></div>
-                        <div><label className="text-xs font-bold text-gray-500">Price / Budget</label><input name="price" required className="w-full border p-2 rounded text-sm"/></div>
-                        <div><label className="text-xs font-bold text-gray-500">WhatsApp</label><input name="contact_info" required className="w-full border p-2 rounded text-sm"/></div>
-                        <div><label className="text-xs font-bold text-gray-500">Description</label><textarea name="description" rows="2" className="w-full border p-2 rounded text-sm"></textarea></div>
-                        <button type="submit" className="w-full bg-black text-white py-3 rounded-lg font-bold hover:bg-gray-800">Submit Ad</button>
-                    </form>
+      {/* 2. AD POSTING MODAL */}
+      {newAdLocation && (
+          <div className="fixed bottom-4 left-4 z-[5000] bg-white p-4 rounded-xl shadow-2xl w-80 border-2 border-blue-500 animate-in slide-in-from-bottom-10">
+               <h3 className="font-bold text-blue-600 mb-2">Post New Ad</h3>
+               <div className="space-y-2">
+                   <select className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, type: e.target.value})}><option value="SELL">Sell Plot</option><option value="LOOKING">Looking For</option></select>
+                   <input placeholder="Size (e.g. 200)" type="number" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, size: e.target.value})} />
+                   <input placeholder="Price (e.g. 1.5 Cr)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, price: e.target.value})} />
+                   <input placeholder="WhatsApp (e.g. 9198...)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, contact: e.target.value})} />
+                   <button onClick={handlePostAd} className="w-full bg-blue-600 text-white py-2 rounded font-bold">Submit</button>
+               </div>
+          </div>
+      )}
+
+      {/* 3. SAVE PROJECT FORM (PRO VERSION) */}
+      {showSaveForm && (
+         <div className="fixed inset-0 bg-black/60 z-[6000] flex justify-center items-center">
+             <div className="bg-white p-6 rounded-lg w-80 shadow-2xl animate-in fade-in">
+                 <h3 className="font-bold mb-4 flex items-center gap-2"><Save size={18}/> Save Master Plan</h3>
+                 <form onSubmit={handleSaveProject} className="space-y-3">
+                     <div className="bg-blue-50 p-2 rounded text-xs text-blue-700 mb-2">
+                        Shape Captured! Enter details to save to database.
+                     </div>
+                     <input name="label" required placeholder="Project Name" className="w-full border p-2 rounded"/>
+                     <input name="survey_no" placeholder="Survey No." className="w-full border p-2 rounded"/>
+                     <textarea name="note" placeholder="Notes" className="w-full border p-2 rounded h-20"/>
+                     <div className="flex gap-2">
+                         <button type="button" onClick={()=>{setShowSaveForm(false); setCurrentShape(null); featureGroupRef.current.clearLayers();}} className="flex-1 bg-gray-200 py-2 rounded">Discard</button>
+                         <button type="submit" className="flex-1 bg-orange-600 text-white py-2 rounded font-bold">Save</button>
+                     </div>
+                 </form>
+             </div>
+         </div>
+      )}
+
+      {/* 4. AUDIT / RATING MODAL (FULL VERSION) */}
+      {showRatingModal && (
+        <div className="fixed inset-0 bg-black/80 z-[7000] flex justify-center items-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-4 text-white flex justify-between items-center shrink-0">
+                    <div><h2 className="font-bold flex items-center gap-2 text-lg"><ShieldCheck className="text-yellow-400"/> Investment Audit</h2></div>
+                    <button onClick={() => setShowRatingModal(false)} className="hover:bg-white/20 p-1 rounded"><X size={20}/></button>
+                </div>
+                <div className="p-6 overflow-y-auto custom-scrollbar">
+                    {/* INPUTS FOR PDF */}
+                    <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <h3 className="text-xs font-black text-indigo-800 uppercase mb-3">1. Regulatory</h3>
+                        <div className="grid grid-cols-2 gap-4 mb-3">
+                            <div><label className="text-[10px] font-bold text-gray-500">Authority</label><select className="w-full border p-2 rounded text-sm mt-1 font-bold" onChange={(e) => setRatingData({...ratingData, approval: e.target.value})}><option value="HMDA">HMDA</option><option value="DTCP">DTCP</option><option value="YTDA">YTDA</option><option value="GP">Gram Panchayat</option><option value="Unapproved">Unapproved</option></select></div>
+                            <div><label className="text-[10px] font-bold text-gray-500">RERA No.</label><input className="w-full border p-2 rounded text-sm mt-1" onChange={(e) => setRatingData({...ratingData, rera: e.target.value})}/></div>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm font-bold text-green-800"><input type="checkbox" className="w-5 h-5 accent-green-600" onChange={(e) => setRatingData({...ratingData, bankLoan: e.target.checked})}/> Bank Loan Available?</label>
+                    </div>
+
+                    <div className="mb-6">
+                        <h3 className="text-xs font-black text-slate-400 uppercase mb-3">2. Location</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                             <div><label className="text-[10px] font-bold text-gray-500">ORR Status</label><select className="w-full border p-2 rounded text-sm mt-1" onChange={(e) => setRatingData({...ratingData, orrStatus: e.target.value})}><option value="Out">Outside ORR</option><option value="In">Inside ORR</option><option value="Growth">Growth Corridor</option></select></div>
+                             <div><label className="text-[10px] font-bold text-gray-500">Distance (km)</label><input type="number" className="w-full border p-2 rounded text-sm mt-1" onChange={(e) => setRatingData({...ratingData, orrDist: e.target.value})}/></div>
+                        </div>
+                    </div>
+
+                    <div className="mb-4 pt-4 border-t border-dashed">
+                        <h3 className="text-xs font-black text-slate-400 uppercase mb-3">3. Price</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                             <div><label className="text-[10px] font-bold text-gray-500">Asking Price</label><input type="number" className="w-full border-b border-slate-300 py-1 text-sm font-bold" onChange={(e) => setRatingData({...ratingData, price: e.target.value})}/></div>
+                             <div><label className="text-[10px] font-bold text-gray-500">Govt Value</label><input type="number" className="w-full border-b border-slate-300 py-1 text-sm font-bold" onChange={(e) => setRatingData({...ratingData, govtValue: e.target.value})}/></div>
+                        </div>
+                    </div>
+                </div>
+                <div className="p-4 border-t bg-white shrink-0">
+                     <button onClick={generatePDF} className="w-full bg-indigo-900 text-white py-3 rounded-lg font-bold hover:bg-black flex items-center justify-center gap-2"><FileText size={18}/> Generate PDF Report</button>
                 </div>
             </div>
         </div>
       )}
-
-      {/* --- MAP AREA --- */}
-      <div className="flex flex-1 relative h-[85vh]">
-        {showCoordsPanel && isMeasuring && ( 
-            <div className="w-80 bg-white shadow-xl z-10 overflow-y-auto border-r border-gray-200 flex flex-col">
-                <div className="p-4 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-bold text-sm">Measure Mode</h3><button onClick={() => setShowCoordsPanel(false)}><X size={16}/></button></div>
-                <div className="p-4">
-                    <button onClick={handleSimplify} className="w-full bg-blue-50 text-blue-700 py-2 rounded text-xs font-bold mb-2">Simplify</button>
-                    <button onClick={() => { setMeasurePoints([]); setTempArea(0); }} className="w-full bg-red-50 text-red-700 py-2 rounded text-xs font-bold mb-2"><Trash2 size={14}/> Wipe</button>
-                    <div className="text-center font-bold text-orange-600 text-lg">{formatArea(tempArea)}</div>
-                </div>
-                <div className="p-4 border-t mt-auto"><button onClick={() => setShowSaveForm(true)} disabled={measurePoints.length < 3} className="w-full bg-green-600 text-white py-2 rounded font-bold">Save Project</button></div>
-            </div> 
-        )}
-
-        <div id="map-print-container" className="flex-1 relative bg-gray-200">
-          <MapContainer center={centerPos} zoom={13} maxZoom={22} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }} ref={mapRef} preferCanvas={true}>
-            <MapController center={centerPos} />
-            <LayersControl position="topright">
-              <LayersControl.BaseLayer checked name="Google Hybrid"><TileLayer url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" attribution='© Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
-              <LayersControl.BaseLayer name="Google Streets"><TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" attribution='© Google' maxNativeZoom={20} maxZoom={22} /></LayersControl.BaseLayer>
-            </LayersControl>
-            
-            {/* VENTURES MODE */}
-            {viewMode === 'VENTURES' && filteredLeads.map((lead) => (
-                 <Polygon key={lead.id} positions={lead.points} pathOptions={{ color: '#10b981', weight: 2, fillColor: '#10b981', fillOpacity: 0.4 }} eventHandlers={{ click: () => { if(isAdmin) handleEditShape(lead); } }}>
-                    <Popup>
-                        <div className="font-bold">{lead.label}</div>
-                        <div>{formatArea(lead.acres)}</div>
-                        <div className="flex gap-2 mt-2">
-                             <button onClick={() => setProjectBrochure(lead)} className="bg-blue-600 text-white px-2 py-1 rounded text-xs">Brochure</button>
-                             <button onClick={() => handleCopyLink(lead.id)} className="bg-gray-600 text-white px-2 py-1 rounded text-xs">Share</button>
-                        </div>
-                    </Popup>
-                 </Polygon>
-            ))}
-
-            {/* MEASURING DRAWING + DISTANCE LABELS */}
-            {measurePoints.length > 0 && <><Polygon positions={measurePoints} pathOptions={{ color: 'orange', weight: 2, fillColor: 'orange', fillOpacity: 0.2 }} />{measurePoints.map((pt, i) => <DraggableVertex key={i} position={pt} index={i} />)}</>}
-            {measurePoints.map((pt, i) => {
-               if (measurePoints.length < 2) return null;
-               const nextPt = measurePoints[(i + 1) % measurePoints.length];
-               if (i === measurePoints.length - 1 && measurePoints.length < 3) return null;
-               const midLat = (pt.lat + nextPt.lat) / 2;
-               const midLng = (pt.lng + nextPt.lng) / 2;
-               const distFeet = Math.round(getDistanceMeters(pt, nextPt) * 3.28084);
-               return <Marker key={`dist-${i}`} position={[midLat, midLng]} icon={L.divIcon({ className: 'text-label', html: `<div style="background:none; color: white; text-shadow: 1px 1px 2px black; font-size: 10px; font-weight: bold;">${distFeet} ft</div>`, iconSize: [40, 10], iconAnchor: [20, 5] })} />;
-            })}
-            
-            {/* MARKETPLACE MODE */}
-            {viewMode === 'MARKETPLACE' && marketAds.map((ad) => (
-                <React.Fragment key={ad.id}>
-                    <Marker position={[ad.lat, ad.lng]} icon={ad.ad_type === 'SELL' ? SellIcon : LookIcon}>
-                        <Popup className="premium-popup">
-    <div className="p-0 min-w-[220px] max-w-[240px]">
-        
-        {/* --- TEMPLATE HEADER: BROCHURE IMAGE --- */}
-        <div className="relative h-28 bg-gray-200 rounded-t-lg overflow-hidden">
-            {/* Creates a placeholder image for DEMO purposes */}
-            <img 
-                src="https://arisingdevelopers.com/wp-content/uploads/2025/01/WhatsApp-Image-2025-01-27-at-14.37.00-1-1024x770.jpeg" 
-                alt="Plot View" 
-                className="w-full h-full object-cover"
-            />
-            <div className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded shadow-sm ${ad.ad_type === 'SELL' ? 'bg-yellow-400 text-yellow-900' : 'bg-blue-500 text-white'}`}>
-                {ad.ad_type === 'SELL' ? 'FOR SALE' : 'WANTED'}
-            </div>
-            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/70 to-transparent p-2">
-                <div className="text-white font-bold text-lg leading-none">{ad.size} <span className="text-xs font-normal">Sq Yds</span></div>
-            </div>
-        </div>
-
-        {/* --- BODY CONTENT --- */}
-        <div className="p-3 bg-white">
-            <div className="flex justify-between items-center mb-2">
-                <span className="text-green-700 font-bold text-lg">{ad.price}</span>
-            </div>
-            
-            <p className="text-gray-500 text-xs line-clamp-2 mb-3 border-l-2 border-gray-300 pl-2 italic">
-                {ad.description || "No description provided."}
-            </p>
-
-            {/* --- ACTION BUTTONS --- */}
-            <button onClick={() => window.open(`https://wa.me/${ad.contact_info}?text=Hi, regarding your ad for ${ad.size} Sq Yds...`, '_blank')} className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 mb-2 shadow-md transition-all">
-                <MessageCircle size={16}/> Contact Owner
-            </button>
-            
-            {/* DEMO: VIDEO BUTTON (Show them this capability!) */}
-            <button onClick={() => alert("This would open the In-App Video Player! (Coming Soon)")} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-gray-300">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                Watch Video Tour
-            </button>
-            {/* --- HISTORY / TIME MACHINE BUTTON --- */}
-<button 
-    onClick={() => window.open(`https://earthengine.google.com/timelapse#v=${ad.lat},${ad.lng},11,latLng&t=1.50`, '_blank')} 
-    className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 mb-2 border border-indigo-200"
->
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-    Check Land History (1984-Now)
-</button>
-
-            {/* ADMIN CONTROLS */}
-            {isAdmin && (
-                <div className="grid grid-cols-2 gap-2 mt-3 pt-2 border-t">
-                    {ad.status === 'PENDING' && <button onClick={() => handleApproveAd(ad.id)} className="bg-blue-100 text-blue-700 hover:bg-blue-200 text-[10px] py-1 rounded font-bold">Approve</button>}
-                    <button onClick={() => handleDeleteAd(ad.id)} className="bg-red-50 text-red-600 hover:bg-red-100 text-[10px] py-1 rounded font-bold col-span-2">Delete Ad</button>
-                </div>
-            )}
-        </div>
-    </div>
-</Popup>
-                    </Marker>
-                    {ad.ad_type === 'SELL' && ad.points && <Polygon positions={ad.points} pathOptions={{ color: 'yellow', weight: 2, dashArray: '5, 5', fillColor: 'yellow', fillOpacity: 0.2 }} />}
-                    {ad.ad_type === 'LOOKING' && <Circle center={[ad.lat, ad.lng]} radius={1000} pathOptions={{ color: 'blue', weight: 1, dashArray: '5, 5', fillColor: 'blue', fillOpacity: 0.1 }} />}
-                </React.Fragment>
-            ))}
-            
-            {newAdLocation && <Marker position={newAdLocation} icon={DefaultIcon}><Popup>New Ad Location</Popup></Marker>}
-            {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Location</Popup></Marker>}
-            
-            {radarResults && <Popup position={radarResults.pos} onClose={() => setRadarResults(null)}><div className="min-w-[200px]"><div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold">Growth Radar</div><div className="pt-2">{radarResults.nodes.map((n,i)=><div key={i} className="flex justify-between text-xs border-b py-1"><span>{n.name}</span><span className="font-bold">{n.dist} km</span></div>)}</div></div></Popup>}
-
-            <DraggableMarker />
-            <MapClickHandler />
-          </MapContainer>
-        </div>
-      </div>
-
-      {showSaveForm && ( <div className="fixed inset-0 bg-black bg-opacity-60 z-[2000] flex justify-center items-center p-4"><div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl"><h2 className="text-lg font-bold mb-4">Save Project</h2><form onSubmit={handleSaveShape} className="space-y-4"><input name="label" required className="w-full border p-2 rounded" placeholder="Project Name" /><input name="survey_no" className="w-full border p-2 rounded" placeholder="Survey No / Location" /><textarea name="note" className="w-full border p-2 rounded h-32" placeholder="Notes..." /><div className="flex gap-2"><button type="button" onClick={() => setShowSaveForm(false)} className="flex-1 bg-gray-100 py-2 rounded">Cancel</button><button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold">Save</button></div></form></div></div> )}
-    {/* --- PROFESSIONAL SAFE LAND EVALUATOR --- */}
-{showRatingModal && (
-<div className="fixed inset-0 bg-black/80 z-[7000] flex justify-center items-center p-4 backdrop-blur-sm">
-    <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-        <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 text-white flex justify-between items-center shrink-0">
-            <div>
-                <h2 className="font-bold flex items-center gap-2 text-lg"><Zap className="text-yellow-400"/> Investment Intelligence</h2>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest">AI + Human Verification System</p>
-            </div>
-            <button onClick={() => setShowRatingModal(false)} className="hover:bg-white/20 p-1 rounded"><X size={20}/></button>
-        </div>
-        
-        <div className="p-6 overflow-y-auto custom-scrollbar">
-            
-            {/* SECTION 1: FINANCIALS */}
-            <div className="mb-6">
-                <h3 className="text-xs font-black text-slate-400 uppercase mb-3 flex items-center gap-2"><Tag size={12}/> 1. Price Analysis</h3>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="text-[10px] font-bold text-gray-500 uppercase">Asking Price (per SqYd)</label>
-                        <div className="flex items-center gap-1 border-b-2 border-slate-200 focus-within:border-blue-600">
-                            <span className="font-bold text-slate-400">₹</span>
-                            <input type="number" placeholder="18000" className="w-full outline-none py-1 font-bold text-slate-700" 
-                                onChange={(e) => setRatingData({...ratingData, price: e.target.value})}
-                            />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="text-[10px] font-bold text-gray-500 uppercase">Govt (SRO) Value</label>
-                        <div className="flex items-center gap-1 border-b-2 border-slate-200 focus-within:border-green-600">
-                            <span className="font-bold text-slate-400">₹</span>
-                            <input type="number" placeholder="5000" className="w-full outline-none py-1 font-bold text-slate-700" 
-                                onChange={(e) => setRatingData({...ratingData, govtValue: e.target.value})}
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* SECTION 2: LEGAL CHECKLIST */}
-            <div className="mb-6">
-                <h3 className="text-xs font-black text-slate-400 uppercase mb-3 flex items-center gap-2"><ShieldCheck size={12}/> 2. Legal Health Check</h3>
-                <div className="bg-slate-50 p-3 rounded-lg space-y-3">
-                    <label className="flex items-center justify-between cursor-pointer">
-                        <span className="text-sm font-medium text-slate-700">📑 30-Year EC Verified?</span>
-                        <input type="checkbox" className="w-5 h-5 accent-green-600" onChange={(e) => setRatingData({...ratingData, encumbrance: e.target.checked})}/>
-                    </label>
-                    <label className="flex items-center justify-between cursor-pointer">
-                        <span className="text-sm font-medium text-slate-700">🔗 Link Docs (Flow) Verified?</span>
-                        <input type="checkbox" className="w-5 h-5 accent-green-600" onChange={(e) => setRatingData({...ratingData, linkDocs: e.target.checked})}/>
-                    </label>
-                    <label className="flex items-center justify-between cursor-pointer">
-                        <span className="text-sm font-medium text-slate-700">🚩 Physical Possession Confirmed?</span>
-                        <input type="checkbox" className="w-5 h-5 accent-green-600" onChange={(e) => setRatingData({...ratingData, possession: e.target.checked})}/>
-                    </label>
-                </div>
-            </div>
-
-            {/* SECTION 3: GROWTH FACTORS */}
-            <div className="mb-6">
-                <h3 className="text-xs font-black text-slate-400 uppercase mb-3 flex items-center gap-2"><TrendingUp size={12}/> 3. Growth Potential</h3>
-                <div className="grid grid-cols-2 gap-3">
-                     <div>
-                        <label className="text-[10px] font-bold text-gray-500">Zoning Type</label>
-                        <select className="w-full border p-2 rounded text-sm mt-1" onChange={(e) => setRatingData({...ratingData, zone: e.target.value})}>
-                            <option value="Residential">Residential (R1)</option>
-                            <option value="Commercial">Commercial</option>
-                            <option value="Industrial">Industrial</option>
-                            <option value="Agri">Conservation/Agri</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="text-[10px] font-bold text-gray-500">Upcoming Infra (5km)</label>
-                        <select className="w-full border p-2 rounded text-sm mt-1">
-                            <option value="None">None</option>
-                            <option value="Highway">National Highway</option>
-                            <option value="Metro">Proposed Metro/RRR</option>
-                            <option value="SEZ">IT/Pharma SEZ</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            {/* DYNAMIC SCORECARD */}
-            {ratingData.price && (
-                <div className="border-t pt-4 bg-slate-50 -mx-6 px-6 pb-2">
-                    <div className="flex justify-between items-center mb-2">
-                        <div>
-                            <div className="text-xs font-bold text-slate-500 uppercase">Investment Confidence</div>
-                            <div className="text-3xl font-black text-slate-800">
-                                {/* ADVANCED SCORING LOGIC */}
-                                {(() => {
-                                    let score = 50; // Base Score
-                                    if(ratingData.encumbrance) score += 15;
-                                    if(ratingData.linkDocs) score += 10;
-                                    if(ratingData.possession) score += 10;
-                                    if(ratingData.zone === 'Commercial' || ratingData.zone === 'Residential') score += 10;
-                                    if(ratingData.zone === 'Agri') score -= 20;
-                                    // Price Penalty: If price is > 3x Govt Value, reduce score
-                                    if(ratingData.govtValue && (ratingData.price > ratingData.govtValue * 3)) score -= 15;
-                                    
-                                    return Math.min(99, Math.max(10, score));
-                                })()}
-                                <span className="text-sm text-gray-400 font-normal">/100</span>
-                            </div>
-                        </div>
-                        
-                        {/* VISUAL METER */}
-                        <div className="text-right">
-                             <div className={`text-sm font-bold px-3 py-1 rounded-full ${
-                                 ratingData.encumbrance && ratingData.linkDocs ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                             }`}>
-                                 {ratingData.encumbrance && ratingData.linkDocs ? '🛡️ Low Risk' : '⚠️ High Risk'}
-                             </div>
-                        </div>
-                    </div>
-                    
-                    <div className="text-[10px] text-slate-500 italic mt-2">
-                        *Score increases only when Documents & Possession are verified.
-                    </div>
-                </div>
-            )}
-        </div>
-        
-        <div className="p-4 border-t bg-white shrink-0">
-             <button 
-    onClick={generatePDF} 
-    className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-black flex items-center justify-center gap-2"
->
-    <FileText size={18}/> Generate Verified Investor PDF
-</button>
-        </div>
-    </div>
-</div>
-)}
     </div>
   );
 };
