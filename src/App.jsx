@@ -225,14 +225,25 @@ const RealEstateSearchApp = () => {
   };
 
   const handleShareAd = async (ad) => {
-      const shareUrl = `${window.location.origin}?ad_id=${ad.id}`;
-      const shareText = `🔥 *Safe Land Deal Alert* 🔥\n\n💎 *Price:* ${ad.price}\n📏 *Size:* ${ad.size}\n📍 *Verified Location:* ${shareUrl}`;
+      // 1. Force the professional domain
+      const shareUrl = `https://maps.safelanddeal.com/?ad_id=${ad.id}`;
+      
+      // 2. Create clean text WITHOUT the URL (the phone attaches the URL automatically)
+      const shareTitle = '🔥 Safe Land Deal Alert';
+      const shareText = `💎 Price: ${ad.price}\n📏 Size: ${ad.size}\n📍 Verified Location:`;
       
       if (navigator.share) {
-          try { await navigator.share({ title: 'Safe Land Deal', text: shareText, url: shareUrl }); } 
-          catch (error) { console.log('Error sharing', error); }
+          try {
+              await navigator.share({
+                  title: shareTitle,
+                  text: shareText, // Text ONLY (no URL here)
+                  url: shareUrl    // URL attached here
+              });
+          } catch (error) { console.log('Error sharing', error); }
       } else {
-          window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+          // Fallback for Desktop (needs URL in text)
+          const whatsappText = `${shareTitle}\n${shareText}\n${shareUrl}`;
+          window.open(`https://wa.me/?text=${encodeURIComponent(whatsappText)}`, '_blank');
       }
   };
 
