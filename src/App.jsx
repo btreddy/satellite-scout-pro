@@ -20,7 +20,7 @@ import {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; 
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999"; 
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -73,6 +73,8 @@ const RealEstateSearchApp = () => {
   // MODALS & VIEWS
   const [showLinksModal, setShowLinksModal] = useState(false); 
   const [showPremiumRequest, setShowPremiumRequest] = useState(false); 
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  
   const [editingAd, setEditingAd] = useState(null);
   const [viewingAd, setViewingAd] = useState(null); 
 
@@ -99,8 +101,7 @@ const RealEstateSearchApp = () => {
   const [currentShape, setCurrentShape] = useState(null); 
   const featureGroupRef = useRef(); 
 
-  // AUDIT
-  const [showRatingModal, setShowRatingModal] = useState(false);
+  // AUDIT DATA
   const [ratingData, setRatingData] = useState({ 
       price: '', govtValue: '', rera: '', approval: 'HMDA', orrDist: '', orrStatus: 'Out', 
       bankLoan: false, devPace: 'Moderate', legal: 'Clear', zone: 'Residential'     
@@ -353,7 +354,6 @@ const RealEstateSearchApp = () => {
         </div>
 
         <div className="flex gap-2 items-center">
-            {/* SEARCH BAR */}
             <div className="hidden md:flex bg-slate-800 px-3 py-1.5 rounded-full items-center gap-2 border border-slate-700">
                 <Search size={14} className="text-gray-400"/>
                 <input placeholder="Search..." className="bg-transparent outline-none text-sm w-32 text-white placeholder-gray-500"
@@ -376,7 +376,7 @@ const RealEstateSearchApp = () => {
         </div>
       </header>
 
-      {/* --- ADMIN DASHBOARD --- */}
+      {/* --- ADMIN DASHBOARD (UPDATED: SEPARATE BUTTONS) --- */}
       {viewMode === 'ADMIN' ? (
           <div className="flex-1 overflow-auto p-6 bg-gray-100">
               <div className="max-w-6xl mx-auto">
@@ -392,7 +392,10 @@ const RealEstateSearchApp = () => {
                               </select>
                           </div>
                           <button onClick={() => fetchMarketplaceAds()} className="p-2 bg-white border rounded hover:bg-gray-50"><RefreshCw size={16}/></button>
-                          <button onClick={() => setShowRatingModal(true)} className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs font-bold flex items-center gap-2 shadow-sm"><ShieldCheck size={14}/> Audit & Links</button>
+                          
+                          {/* UPDATED ADMIN BUTTONS */}
+                          <button onClick={() => setShowLinksModal(true)} className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-bold flex items-center gap-2 shadow-sm"><Globe size={14}/> Govt Links</button>
+                          <button onClick={() => setShowRatingModal(true)} className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs font-bold flex items-center gap-2 shadow-sm"><ShieldCheck size={14}/> Audit PDF Tool</button>
                       </div>
                   </div>
 
@@ -543,29 +546,6 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
-      {/* --- SUB-TOOLBAR (RESTORED) --- */}
-      {viewMode !== 'ADMIN' && (
-        <div className="bg-white border-b px-4 py-2 flex gap-3 items-center text-xs overflow-x-auto shadow-sm">
-            {viewMode === 'MARKETPLACE' && (
-                <>
-                  <span className="font-bold text-blue-800 flex items-center gap-1"><Store size={12}/> MARKET TOOLS:</span>
-                  <button onClick={() => { if(!adMode) { setAdMode('SELL'); alert("Click map to place ad"); } else { setAdMode(null); setNewAdLocation(null); } }} 
-                      className={`px-3 py-1 rounded border font-bold flex items-center gap-1 ${adMode ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700'}`}>
-                      {adMode ? <X size={12}/> : <PlusCircle size={12}/>}
-                      {adMode ? 'Cancel Posting' : 'Post Free Ad'}
-                  </button>
-                  <button onClick={() => setShowLinksModal(true)} className="px-3 py-1 rounded border border-gray-200 bg-gray-50 text-gray-700 font-bold flex items-center gap-1 hover:bg-gray-100"><Globe size={12}/> Verify Land</button>
-                </>
-            )}
-            {viewMode === 'VENTURE' && (
-                <>
-                  <span className="font-bold text-orange-800 flex items-center gap-1"><PenTool size={12}/> PRO TOOLS:</span>
-                  <button onClick={() => fetchProjects()} className="ml-2 px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"><Eye size={12}/> Refresh Projects</button>
-                </>
-            )}
-        </div>
-      )}
-
       {/* --- NEW: "LANDING PAGE" WELCOME CARD (UPDATED WITH AMBASSADOR MODE) --- */}
       {viewingAd && (
           <div className="fixed inset-0 bg-black/70 z-[9999] flex justify-center items-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -619,6 +599,29 @@ const RealEstateSearchApp = () => {
                   </div>
               </div>
           </div>
+      )}
+
+      {/* --- SUB-TOOLBAR --- */}
+      {viewMode !== 'ADMIN' && (
+        <div className="bg-white border-b px-4 py-2 flex gap-3 items-center text-xs overflow-x-auto shadow-sm">
+            {viewMode === 'MARKETPLACE' && (
+                <>
+                  <span className="font-bold text-blue-800 flex items-center gap-1"><Store size={12}/> MARKET TOOLS:</span>
+                  <button onClick={() => { if(!adMode) { setAdMode('SELL'); alert("Click map to place ad"); } else { setAdMode(null); setNewAdLocation(null); } }} 
+                      className={`px-3 py-1 rounded border font-bold flex items-center gap-1 ${adMode ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700'}`}>
+                      {adMode ? <X size={12}/> : <PlusCircle size={12}/>}
+                      {adMode ? 'Cancel Posting' : 'Post Free Ad'}
+                  </button>
+                  <button onClick={() => setShowLinksModal(true)} className="px-3 py-1 rounded border border-gray-200 bg-gray-50 text-gray-700 font-bold flex items-center gap-1 hover:bg-gray-100"><Globe size={12}/> Verify Land</button>
+                </>
+            )}
+            {viewMode === 'VENTURE' && (
+                <>
+                  <span className="font-bold text-orange-800 flex items-center gap-1"><PenTool size={12}/> PRO TOOLS:</span>
+                  <button onClick={() => fetchProjects()} className="ml-2 px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"><Eye size={12}/> Refresh Projects</button>
+                </>
+            )}
+        </div>
       )}
 
       {/* --- NEW: EDIT AD MODAL (UPDATED WITH AUDIO) --- */}
@@ -745,6 +748,39 @@ const RealEstateSearchApp = () => {
                   <button onClick={()=>{ if(pinInput===PIN_CODE){ setIsAdmin(true); setShowPinModal(false); } else alert("Wrong PIN"); }} className="w-full bg-black text-white py-2 rounded font-bold">Unlock</button>
               </div>
           </div>
+      )}
+
+      {/* --- RATING MODAL --- */}
+      {showRatingModal && (
+        <div className="fixed inset-0 bg-black/80 z-[7000] flex justify-center items-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-4 text-white flex justify-between items-center shrink-0">
+                    <div><h2 className="font-bold flex items-center gap-2 text-lg"><ShieldCheck className="text-yellow-400"/> Investment Audit</h2></div>
+                    <button onClick={() => setShowRatingModal(false)} className="hover:bg-white/20 p-1 rounded"><X size={20}/></button>
+                </div>
+                <div className="p-6 overflow-y-auto custom-scrollbar">
+                    <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <h3 className="text-xs font-black text-indigo-800 uppercase mb-3">1. Regulatory</h3>
+                        <div className="grid grid-cols-2 gap-4 mb-3">
+                            <div><label className="text-[10px] font-bold text-gray-500">Authority</label><select className="w-full border p-2 rounded text-sm mt-1 font-bold" onChange={(e) => setRatingData({...ratingData, approval: e.target.value})}><option value="HMDA">HMDA</option><option value="DTCP">DTCP</option><option value="YTDA">YTDA</option><option value="GP">Gram Panchayat</option><option value="Unapproved">Unapproved</option></select></div>
+                            <div><label className="text-[10px] font-bold text-gray-500">RERA No.</label><input className="w-full border p-2 rounded text-sm mt-1" onChange={(e) => setRatingData({...ratingData, rera: e.target.value})}/></div>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm font-bold text-green-800"><input type="checkbox" className="w-5 h-5 accent-green-600" onChange={(e) => setRatingData({...ratingData, bankLoan: e.target.checked})}/> Bank Loan Available?</label>
+                    </div>
+                    {/* ... other audit inputs kept simple for brevity ... */}
+                    <div className="mb-4 pt-4 border-t border-dashed">
+                        <h3 className="text-xs font-black text-slate-400 uppercase mb-3">2. Financials</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                             <div><label className="text-[10px] font-bold text-gray-500">Asking Price</label><input type="number" className="w-full border-b border-slate-300 py-1 text-sm font-bold" onChange={(e) => setRatingData({...ratingData, price: e.target.value})}/></div>
+                             <div><label className="text-[10px] font-bold text-gray-500">Govt Value</label><input type="number" className="w-full border-b border-slate-300 py-1 text-sm font-bold" onChange={(e) => setRatingData({...ratingData, govtValue: e.target.value})}/></div>
+                        </div>
+                    </div>
+                </div>
+                <div className="p-4 border-t bg-white shrink-0">
+                     <button onClick={() => generatePDF(false)} className="w-full bg-indigo-900 text-white py-3 rounded-lg font-bold hover:bg-black flex items-center justify-center gap-2"><FileText size={18}/> Generate PDF Report</button>
+                </div>
+            </div>
+        </div>
       )}
     </div>
   );
