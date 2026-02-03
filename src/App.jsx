@@ -13,7 +13,7 @@ import {
   X, Crosshair, Search, Zap, Radar, FileText, Lock, Unlock, 
   Map as MapIcon, MessageCircle, Store, PenTool, Save, Eye,
   CheckCircle, Trash2, ExternalLink, ShieldCheck, List, Filter, 
-  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video, UploadCloud, Edit, Mic, FileAudio
+  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video, UploadCloud, Edit, Mic, Share2
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -125,7 +125,6 @@ const RealEstateSearchApp = () => {
 
         const { data } = supabase.storage.from('ad-images').getPublicUrl(filePath);
         
-        // Update State based on type (image or audio)
         if (isEditMode && editingAd) {
              if(type === 'image') setEditingAd({ ...editingAd, image_url: data.publicUrl });
              if(type === 'audio') setEditingAd({ ...editingAd, audio_url: data.publicUrl });
@@ -203,6 +202,26 @@ const RealEstateSearchApp = () => {
             setMarketAds(prev => prev.filter(ad => ad.id !== id));
             alert("✅ Ad Deleted.");
         }
+      }
+  };
+
+  const handleShareAd = async (ad) => {
+      const shareText = `🔥 *Safe Land Deal Alert* 🔥\n\n💎 *Price:* ${ad.price}\n📏 *Size:* ${ad.size}\n📞 *Contact:* ${ad.contact_info}\n\n📍 *View Location on Map:*\nhttps://www.google.com/maps?q=${ad.lat},${ad.lng}\n\n(Verified by Safe Land Console)`;
+      
+      // Mobile Native Share
+      if (navigator.share) {
+          try {
+              await navigator.share({
+                  title: 'Safe Land Deal',
+                  text: shareText,
+                  url: window.location.href
+              });
+          } catch (error) {
+              console.log('Error sharing', error);
+          }
+      } else {
+          // Desktop Fallback (WhatsApp Web)
+          window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
       }
   };
 
@@ -457,9 +476,13 @@ const RealEstateSearchApp = () => {
                                       <button onClick={() => window.open(`https://wa.me/${ad.contact_info}?text=Hi, I saw your ad for ${ad.price}. Can I see the Legal/Audit Report?`, '_blank')} className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 shadow-md"><Award size={10}/> Request Report</button>
                                   </div>
                                   
-                                  {ad.video_url && (
-                                      <button onClick={() => window.open(ad.video_url, '_blank')} className="w-full bg-red-600 text-white py-1 rounded text-xs font-bold flex items-center justify-center gap-1"><Video size={12}/> Watch Video</button>
-                                  )}
+                                  {/* VIDEO + SHARE BUTTONS */}
+                                  <div className="grid grid-cols-2 gap-2">
+                                      {ad.video_url ? (
+                                          <button onClick={() => window.open(ad.video_url, '_blank')} className="bg-red-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1"><Video size={12}/> Watch Video</button>
+                                      ) : <div/>}
+                                      <button onClick={() => handleShareAd(ad)} className="bg-blue-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 shadow-sm"><Share2 size={12}/> Share Ad</button>
+                                  </div>
                               </div>
                           </div>
                       </Popup>
