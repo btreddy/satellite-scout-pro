@@ -13,14 +13,14 @@ import {
   X, Crosshair, Search, Zap, Radar, FileText, Lock, Unlock, 
   Map as MapIcon, MessageCircle, Store, PenTool, Save, Eye,
   CheckCircle, Trash2, ExternalLink, ShieldCheck, List, Filter, 
-  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video, UploadCloud, Edit, Mic, Share2, MapPin
+  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video, UploadCloud, Edit, Mic, Share2, MapPin, Star
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; 
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999"; 
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -41,6 +41,16 @@ const DefaultIcon = L.icon({
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
 });
+
+// Gold Icon for Ambassador
+const GoldIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // --- GROWTH NODES ---
@@ -102,7 +112,7 @@ const RealEstateSearchApp = () => {
     fetchProjects();
   }, [isAdmin]);
 
-  // --- DEEP LINK HANDLER (FIXED) ---
+  // --- DEEP LINK HANDLER ---
   useEffect(() => {
       if (marketAds.length > 0) {
           const params = new URLSearchParams(window.location.search);
@@ -114,7 +124,7 @@ const RealEstateSearchApp = () => {
                   setTempSearchMarker([foundAd.lat, foundAd.lng]); 
               }
           } else {
-              setViewingAd(null); // RESET VIEW if no ID (Fixes "Previous Ad" bug)
+              setViewingAd(null); 
           }
       }
   }, [marketAds]);
@@ -225,25 +235,14 @@ const RealEstateSearchApp = () => {
   };
 
   const handleShareAd = async (ad) => {
-      // 1. Force the professional domain
       const shareUrl = `https://maps.safelanddeal.com/?ad_id=${ad.id}`;
-      
-      // 2. Create clean text WITHOUT the URL (the phone attaches the URL automatically)
-      const shareTitle = '🔥 Safe Land Deal Alert';
-      const shareText = `💎 Price: ${ad.price}\n📏 Size: ${ad.size}\n📍 Verified Location:`;
+      const shareText = `🔥 *Safe Land Deal Alert* 🔥\n\n💎 *Price:* ${ad.price}\n📏 *Size:* ${ad.size}\n📍 *Verified Location:*`;
       
       if (navigator.share) {
-          try {
-              await navigator.share({
-                  title: shareTitle,
-                  text: shareText, // Text ONLY (no URL here)
-                  url: shareUrl    // URL attached here
-              });
-          } catch (error) { console.log('Error sharing', error); }
+          try { await navigator.share({ title: 'Safe Land Deal', text: shareText, url: shareUrl }); } 
+          catch (error) { console.log('Error sharing', error); }
       } else {
-          // Fallback for Desktop (needs URL in text)
-          const whatsappText = `${shareTitle}\n${shareText}\n${shareUrl}`;
-          window.open(`https://wa.me/?text=${encodeURIComponent(whatsappText)}`, '_blank');
+          window.open(`https://wa.me/?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
       }
   };
 
@@ -450,7 +449,7 @@ const RealEstateSearchApp = () => {
       ) : (
         /* --- MAP VIEW --- */
         <div className="flex-1 relative z-0">
-          <MapContainer center={[17.0500, 78.5500]} zoom={13} maxZoom={22} style={{ height: "100%", width: "100%" }}>
+          <MapContainer center={[17.2360, 78.4192]} zoom={13} maxZoom={22} style={{ height: "100%", width: "100%" }}>
             <LayersControl position="topright">
                 <LayersControl.BaseLayer checked name="Satellite (Clean)">
                     <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri" maxNativeZoom={18} maxZoom={22} />
@@ -465,51 +464,68 @@ const RealEstateSearchApp = () => {
 
             <FlyToSearchResult />
 
-            {viewMode === 'MARKETPLACE' && marketAds.map((ad) => (
+            {viewMode === 'MARKETPLACE' && marketAds.map((ad) => {
+                const isAmbassador = ad.price === '0' || ad.price === '0 ' || ad.price === 'FREE';
+                return (
                 <React.Fragment key={ad.id}>
-                    <Marker position={[ad.lat, ad.lng]} icon={DefaultIcon}>
-                      <Popup className="premium-popup">
-                          <div className="min-w-[200px]">
+                    <Marker position={[ad.lat, ad.lng]} icon={isAmbassador ? GoldIcon : DefaultIcon}>
+                      <Popup className={isAmbassador ? "ambassador-popup" : "premium-popup"}>
+                          <div className={`min-w-[220px] ${isAmbassador ? 'bg-slate-900 text-white -m-4 p-0 rounded-xl overflow-hidden shadow-2xl border border-yellow-500' : ''}`}>
                               {/* DYNAMIC IMAGE DISPLAY */}
                               {ad.image_url ? (
-                                  <img src={ad.image_url} alt="Plot" className="w-full h-32 object-cover rounded-t-lg bg-gray-100"/>
+                                  <img src={ad.image_url} alt="Plot" className="w-full h-32 object-cover rounded-t-lg"/>
                               ) : (
                                   <div className="bg-slate-100 h-24 rounded-t-lg flex items-center justify-center text-slate-400 font-bold text-xs">NO IMAGE</div>
                               )}
                               
-                              <div className="p-3">
-                                  <h3 className="font-bold text-lg text-green-700">{ad.price}</h3>
-                                  <p className="text-xs text-gray-500 mb-2">{ad.size} | {ad.ad_type}</p>
+                              <div className="p-4">
+                                  {isAmbassador && <div className="bg-gradient-to-r from-yellow-500 to-yellow-700 text-black text-xs font-black px-2 py-1 rounded w-fit mb-2 flex items-center gap-1"><Star size={10}/> OFFICIAL PLATFORM</div>}
                                   
-                                  {ad.description && <p className="text-[10px] text-gray-600 italic mb-2 p-2 bg-gray-50 rounded border">{ad.description}</p>}
+                                  <h3 className={`font-bold text-lg ${isAmbassador ? 'text-yellow-400' : 'text-green-700'}`}>{isAmbassador ? 'JOIN NOW (FREE)' : ad.price}</h3>
+                                  <p className={`text-xs mb-3 ${isAmbassador ? 'text-gray-300' : 'text-gray-500'}`}>{ad.size} | {ad.ad_type}</p>
+                                  
+                                  {ad.description && <p className={`text-[10px] italic mb-3 p-2 rounded border ${isAmbassador ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>{ad.description}</p>}
 
                                   {/* AUDIO PLAYER */}
                                   {ad.audio_url && (
-                                      <div className="mb-2">
-                                          <p className="text-[10px] font-bold text-purple-600 flex items-center gap-1"><Mic size={10}/> Owner's Voice Note:</p>
-                                          <audio controls src={ad.audio_url} className="w-full h-6 mt-1" />
+                                      <div className="mb-3">
+                                          <p className={`text-[10px] font-bold flex items-center gap-1 ${isAmbassador ? 'text-yellow-500' : 'text-purple-600'}`}><Mic size={10}/> {isAmbassador ? "Founder's Message:" : "Owner's Voice Note:"}</p>
+                                          <audio controls src={ad.audio_url} className="w-full h-6 mt-1" style={{ filter: isAmbassador ? 'invert(1)' : 'none' }} />
                                       </div>
                                   )}
 
                                   <div className="grid grid-cols-2 gap-2 mb-2">
-                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="bg-green-600 text-white py-1.5 rounded text-xs font-bold">WhatsApp Owner</button>
-                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}?text=Hi, I saw your ad for ${ad.price}. Can I see the Legal/Audit Report?`, '_blank')} className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 shadow-md"><Award size={10}/> Request Report</button>
+                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className={`${isAmbassador ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-green-600 text-white'} py-2 rounded text-xs font-bold`}>{isAmbassador ? 'Join Platform' : 'WhatsApp Owner'}</button>
+                                      
+                                      {isAmbassador ? (
+                                          <button onClick={() => setShowPremiumRequest(true)} className="bg-slate-700 text-white border border-slate-600 py-2 rounded text-xs font-bold">Request Audit</button>
+                                      ) : (
+                                          <button onClick={() => window.open(`https://wa.me/${ad.contact_info}?text=Hi, I saw your ad for ${ad.price}. Can I see the Legal/Audit Report?`, '_blank')} className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 shadow-md"><Award size={10}/> Report</button>
+                                      )}
                                   </div>
                                   
-                                  {/* VIDEO + SHARE BUTTONS */}
                                   <div className="grid grid-cols-2 gap-2">
                                       {ad.video_url ? (
-                                          <button onClick={() => window.open(ad.video_url, '_blank')} className="bg-red-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1"><Video size={12}/> Watch Video</button>
+                                          <button onClick={() => window.open(ad.video_url, '_blank')} className={`${isAmbassador ? 'bg-red-700 text-white' : 'bg-red-600 text-white'} py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1`}><Video size={12}/> Watch</button>
                                       ) : <div/>}
-                                      <button onClick={() => handleShareAd(ad)} className="bg-blue-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 shadow-sm"><Share2 size={12}/> Share Ad</button>
+                                      <button onClick={() => handleShareAd(ad)} className={`${isAmbassador ? 'bg-blue-700 text-white' : 'bg-blue-600 text-white'} py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 shadow-sm`}><Share2 size={12}/> Share</button>
                                   </div>
                               </div>
                           </div>
                       </Popup>
                     </Marker>
-                    {ad.points && <Polygon positions={ad.points} pathOptions={{ color: 'yellow', fillColor: 'yellow', fillOpacity: 0.2 }} />}
+                    {ad.points && (
+                        <Polygon 
+                            positions={ad.points} 
+                            pathOptions={{ 
+                                color: isAmbassador ? 'gold' : 'yellow', 
+                                fillColor: isAmbassador ? 'gold' : 'yellow', 
+                                fillOpacity: 0.2 
+                            }} 
+                        />
+                    )}
                 </React.Fragment>
-            ))}
+            )})}
             
             {viewMode === 'VENTURE' && (
                 <FeatureGroup ref={featureGroupRef}>
@@ -527,61 +543,7 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
-      {/* --- NEW: "LANDING PAGE" WELCOME CARD --- */}
-      {viewingAd && (
-          <div className="fixed inset-0 bg-black/70 z-[9999] flex justify-center items-center p-4 backdrop-blur-sm animate-in fade-in">
-              <div className="bg-white p-0 rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
-                  {/* HERO IMAGE */}
-                  <div className="h-48 relative bg-gray-100">
-                      {viewingAd.image_url ? (
-                          <img src={viewingAd.image_url} alt="Land" className="w-full h-full object-cover"/>
-                      ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold bg-slate-100">NO IMAGE</div>
-                      )}
-                      <button onClick={()=>setViewingAd(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"><X size={20}/></button>
-                      <div className="absolute bottom-2 left-2 bg-green-600 text-white px-2 py-1 text-xs font-bold rounded flex items-center gap-1"><ShieldCheck size={12}/> VERIFIED LISTING</div>
-                  </div>
-                  
-                  {/* DETAILS */}
-                  <div className="p-5">
-                      <div className="flex justify-between items-start mb-2">
-                          <div>
-                              <h2 className="text-2xl font-black text-slate-800">{viewingAd.price}</h2>
-                              <p className="text-sm font-bold text-slate-500">{viewingAd.size} | {viewingAd.ad_type}</p>
-                          </div>
-                          
-                          {/* UPDATED: VIEW MAP BUTTON (NOW FUNCTIONAL) */}
-                          <button onClick={() => setViewingAd(null)} className="bg-blue-50 text-blue-700 p-2 rounded-lg text-xs font-bold text-center hover:bg-blue-100 transition-colors">
-                              <MapPin size={16} className="mx-auto mb-1"/>
-                              View Map
-                          </button>
-                      </div>
-
-                      {viewingAd.description && <p className="text-xs text-gray-600 mb-4 bg-slate-50 p-2 rounded border">{viewingAd.description}</p>}
-
-                      {/* --- NEW: AUDIO IN WELCOME CARD --- */}
-                      {viewingAd.audio_url && (
-                          <div className="mb-4 bg-purple-50 p-2 rounded border border-purple-100">
-                              <p className="text-xs font-bold text-purple-700 flex items-center gap-1 mb-1"><Mic size={12}/> Owner's Voice Note</p>
-                              <audio controls src={viewingAd.audio_url} className="w-full h-8" />
-                          </div>
-                      )}
-
-                      {/* ACTIONS */}
-                      <div className="space-y-2">
-                          <button onClick={() => window.open(`https://wa.me/${viewingAd.contact_info}`, '_blank')} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-green-700"><MessageCircle size={18}/> Contact Owner</button>
-                          
-                          <div className="flex gap-2">
-                              {viewingAd.video_url && <button onClick={() => window.open(viewingAd.video_url, '_blank')} className="flex-1 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 hover:bg-red-100"><Video size={14}/> Watch Video</button>}
-                              <button onClick={() => setViewingAd(null)} className="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg font-bold text-xs hover:bg-slate-200">Explore Map</button>
-                          </div>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* --- SUB-TOOLBAR --- */}
+      {/* --- SUB-TOOLBAR (RESTORED) --- */}
       {viewMode !== 'ADMIN' && (
         <div className="bg-white border-b px-4 py-2 flex gap-3 items-center text-xs overflow-x-auto shadow-sm">
             {viewMode === 'MARKETPLACE' && (
@@ -602,6 +564,61 @@ const RealEstateSearchApp = () => {
                 </>
             )}
         </div>
+      )}
+
+      {/* --- NEW: "LANDING PAGE" WELCOME CARD (UPDATED WITH AMBASSADOR MODE) --- */}
+      {viewingAd && (
+          <div className="fixed inset-0 bg-black/70 z-[9999] flex justify-center items-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className={`p-0 rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col ${viewingAd.price === '0' ? 'bg-slate-900 text-white border border-yellow-500' : 'bg-white'}`}>
+                  {/* HERO IMAGE */}
+                  <div className="h-48 relative bg-gray-100">
+                      {viewingAd.image_url ? (
+                          <img src={viewingAd.image_url} alt="Land" className="w-full h-full object-cover"/>
+                      ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold bg-slate-100">NO IMAGE</div>
+                      )}
+                      <button onClick={()=>setViewingAd(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"><X size={20}/></button>
+                      <div className={`absolute bottom-2 left-2 px-2 py-1 text-xs font-bold rounded flex items-center gap-1 ${viewingAd.price === '0' ? 'bg-yellow-500 text-black' : 'bg-green-600 text-white'}`}>
+                          <ShieldCheck size={12}/> {viewingAd.price === '0' ? 'OFFICIAL PLATFORM' : 'VERIFIED LISTING'}
+                      </div>
+                  </div>
+                  
+                  {/* DETAILS */}
+                  <div className="p-5">
+                      <div className="flex justify-between items-start mb-2">
+                          <div>
+                              <h2 className={`text-2xl font-black ${viewingAd.price === '0' ? 'text-yellow-400' : 'text-slate-800'}`}>{viewingAd.price === '0' ? 'JOIN NOW (FREE)' : viewingAd.price}</h2>
+                              <p className={`text-sm font-bold ${viewingAd.price === '0' ? 'text-gray-400' : 'text-slate-500'}`}>{viewingAd.size} | {viewingAd.ad_type}</p>
+                          </div>
+                          
+                          <button onClick={() => setViewingAd(null)} className={`${viewingAd.price === '0' ? 'bg-slate-700 text-gray-300' : 'bg-blue-50 text-blue-700'} p-2 rounded-lg text-xs font-bold text-center`}>
+                              <MapPin size={16} className="mx-auto mb-1"/>
+                              View Map
+                          </button>
+                      </div>
+
+                      {viewingAd.description && <p className={`text-xs mb-4 p-2 rounded border ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-slate-50 text-gray-600'}`}>{viewingAd.description}</p>}
+
+                      {/* AUDIO */}
+                      {viewingAd.audio_url && (
+                          <div className={`mb-4 p-2 rounded border ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700' : 'bg-purple-50 border-purple-100'}`}>
+                              <p className={`text-xs font-bold flex items-center gap-1 mb-1 ${viewingAd.price === '0' ? 'text-yellow-500' : 'text-purple-700'}`}><Mic size={12}/> {viewingAd.price === '0' ? "Founder's Message" : "Owner's Voice Note"}</p>
+                              <audio controls src={viewingAd.audio_url} className="w-full h-8" style={{ filter: viewingAd.price === '0' ? 'invert(1)' : 'none' }} />
+                          </div>
+                      )}
+
+                      {/* ACTIONS */}
+                      <div className="space-y-2">
+                          <button onClick={() => window.open(`https://wa.me/${viewingAd.contact_info}`, '_blank')} className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${viewingAd.price === '0' ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-green-600 text-white hover:bg-green-700'}`}><MessageCircle size={18}/> {viewingAd.price === '0' ? 'Join Platform Now' : 'Contact Owner'}</button>
+                          
+                          <div className="flex gap-2">
+                              {viewingAd.video_url && <button onClick={() => window.open(viewingAd.video_url, '_blank')} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 hover:bg-red-700"><Video size={14}/> Watch</button>}
+                              <button onClick={() => setViewingAd(null)} className={`flex-1 py-2 rounded-lg font-bold text-xs ${viewingAd.price === '0' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'}`}>Explore Map</button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
       )}
 
       {/* --- NEW: EDIT AD MODAL (UPDATED WITH AUDIO) --- */}
@@ -728,39 +745,6 @@ const RealEstateSearchApp = () => {
                   <button onClick={()=>{ if(pinInput===PIN_CODE){ setIsAdmin(true); setShowPinModal(false); } else alert("Wrong PIN"); }} className="w-full bg-black text-white py-2 rounded font-bold">Unlock</button>
               </div>
           </div>
-      )}
-
-      {/* --- RATING MODAL --- */}
-      {showRatingModal && (
-        <div className="fixed inset-0 bg-black/80 z-[7000] flex justify-center items-center p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-                <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-4 text-white flex justify-between items-center shrink-0">
-                    <div><h2 className="font-bold flex items-center gap-2 text-lg"><ShieldCheck className="text-yellow-400"/> Investment Audit</h2></div>
-                    <button onClick={() => setShowRatingModal(false)} className="hover:bg-white/20 p-1 rounded"><X size={20}/></button>
-                </div>
-                <div className="p-6 overflow-y-auto custom-scrollbar">
-                    <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <h3 className="text-xs font-black text-indigo-800 uppercase mb-3">1. Regulatory</h3>
-                        <div className="grid grid-cols-2 gap-4 mb-3">
-                            <div><label className="text-[10px] font-bold text-gray-500">Authority</label><select className="w-full border p-2 rounded text-sm mt-1 font-bold" onChange={(e) => setRatingData({...ratingData, approval: e.target.value})}><option value="HMDA">HMDA</option><option value="DTCP">DTCP</option><option value="YTDA">YTDA</option><option value="GP">Gram Panchayat</option><option value="Unapproved">Unapproved</option></select></div>
-                            <div><label className="text-[10px] font-bold text-gray-500">RERA No.</label><input className="w-full border p-2 rounded text-sm mt-1" onChange={(e) => setRatingData({...ratingData, rera: e.target.value})}/></div>
-                        </div>
-                        <label className="flex items-center gap-2 text-sm font-bold text-green-800"><input type="checkbox" className="w-5 h-5 accent-green-600" onChange={(e) => setRatingData({...ratingData, bankLoan: e.target.checked})}/> Bank Loan Available?</label>
-                    </div>
-                    {/* ... other audit inputs kept simple for brevity ... */}
-                    <div className="mb-4 pt-4 border-t border-dashed">
-                        <h3 className="text-xs font-black text-slate-400 uppercase mb-3">2. Financials</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                             <div><label className="text-[10px] font-bold text-gray-500">Asking Price</label><input type="number" className="w-full border-b border-slate-300 py-1 text-sm font-bold" onChange={(e) => setRatingData({...ratingData, price: e.target.value})}/></div>
-                             <div><label className="text-[10px] font-bold text-gray-500">Govt Value</label><input type="number" className="w-full border-b border-slate-300 py-1 text-sm font-bold" onChange={(e) => setRatingData({...ratingData, govtValue: e.target.value})}/></div>
-                        </div>
-                    </div>
-                </div>
-                <div className="p-4 border-t bg-white shrink-0">
-                     <button onClick={() => generatePDF(false)} className="w-full bg-indigo-900 text-white py-3 rounded-lg font-bold hover:bg-black flex items-center justify-center gap-2"><FileText size={18}/> Generate PDF Report</button>
-                </div>
-            </div>
-        </div>
       )}
     </div>
   );
