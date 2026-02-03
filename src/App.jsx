@@ -64,7 +64,7 @@ const RealEstateSearchApp = () => {
   const [showLinksModal, setShowLinksModal] = useState(false); 
   const [showPremiumRequest, setShowPremiumRequest] = useState(false); 
   const [editingAd, setEditingAd] = useState(null);
-  const [viewingAd, setViewingAd] = useState(null); // Deep Link View
+  const [viewingAd, setViewingAd] = useState(null); 
 
   // DASHBOARD FILTERS
   const [filterText, setFilterText] = useState('');
@@ -102,7 +102,7 @@ const RealEstateSearchApp = () => {
     fetchProjects();
   }, [isAdmin]);
 
-  // --- DEEP LINK HANDLER ---
+  // --- DEEP LINK HANDLER (FIXED) ---
   useEffect(() => {
       if (marketAds.length > 0) {
           const params = new URLSearchParams(window.location.search);
@@ -113,6 +113,8 @@ const RealEstateSearchApp = () => {
                   setViewingAd(foundAd); 
                   setTempSearchMarker([foundAd.lat, foundAd.lng]); 
               }
+          } else {
+              setViewingAd(null); // RESET VIEW if no ID (Fixes "Previous Ad" bug)
           }
       }
   }, [marketAds]);
@@ -341,6 +343,7 @@ const RealEstateSearchApp = () => {
         </div>
 
         <div className="flex gap-2 items-center">
+            {/* SEARCH BAR */}
             <div className="hidden md:flex bg-slate-800 px-3 py-1.5 rounded-full items-center gap-2 border border-slate-700">
                 <Search size={14} className="text-gray-400"/>
                 <input placeholder="Search..." className="bg-transparent outline-none text-sm w-32 text-white placeholder-gray-500"
@@ -545,6 +548,14 @@ const RealEstateSearchApp = () => {
 
                       {viewingAd.description && <p className="text-xs text-gray-600 mb-4 bg-slate-50 p-2 rounded border">{viewingAd.description}</p>}
 
+                      {/* --- NEW: AUDIO IN WELCOME CARD --- */}
+                      {viewingAd.audio_url && (
+                          <div className="mb-4 bg-purple-50 p-2 rounded border border-purple-100">
+                              <p className="text-xs font-bold text-purple-700 flex items-center gap-1 mb-1"><Mic size={12}/> Owner's Voice Note</p>
+                              <audio controls src={viewingAd.audio_url} className="w-full h-8" />
+                          </div>
+                      )}
+
                       {/* ACTIONS */}
                       <div className="space-y-2">
                           <button onClick={() => window.open(`https://wa.me/${viewingAd.contact_info}`, '_blank')} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-green-700"><MessageCircle size={18}/> Contact Owner</button>
@@ -614,7 +625,7 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
-      {/* --- POST AD MODAL --- */}
+      {/* --- POST AD MODAL (NEW: TEXTAREA + AUDIO) --- */}
       {newAdLocation && (
           <div className="fixed bottom-4 left-4 z-[5000] bg-white p-4 rounded-xl shadow-2xl w-80 border-2 border-blue-500 animate-in slide-in-from-bottom-10 max-h-[90vh] overflow-y-auto">
                <h3 className="font-bold text-blue-600 mb-2">Post New Ad</h3>
