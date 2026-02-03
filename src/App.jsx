@@ -64,9 +64,7 @@ const RealEstateSearchApp = () => {
   const [showLinksModal, setShowLinksModal] = useState(false); 
   const [showPremiumRequest, setShowPremiumRequest] = useState(false); 
   const [editingAd, setEditingAd] = useState(null);
-  
-  // NEW: "Landing Page" View for specific ads
-  const [viewingAd, setViewingAd] = useState(null); 
+  const [viewingAd, setViewingAd] = useState(null); // Deep Link View
 
   // DASHBOARD FILTERS
   const [filterText, setFilterText] = useState('');
@@ -105,7 +103,6 @@ const RealEstateSearchApp = () => {
   }, [isAdmin]);
 
   // --- DEEP LINK HANDLER ---
-  // When ads are fetched, check if the URL has an ?ad_id=XYZ parameter
   useEffect(() => {
       if (marketAds.length > 0) {
           const params = new URLSearchParams(window.location.search);
@@ -113,8 +110,8 @@ const RealEstateSearchApp = () => {
           if (sharedAdId) {
               const foundAd = marketAds.find(ad => ad.id.toString() === sharedAdId);
               if (foundAd) {
-                  setViewingAd(foundAd); // Open the "Welcome Card"
-                  setTempSearchMarker([foundAd.lat, foundAd.lng]); // Fly to location
+                  setViewingAd(foundAd); 
+                  setTempSearchMarker([foundAd.lat, foundAd.lng]); 
               }
           }
       }
@@ -225,24 +222,14 @@ const RealEstateSearchApp = () => {
       }
   };
 
-  // --- SMART SHARE FUNCTION ---
   const handleShareAd = async (ad) => {
-      // Create a Deep Link that opens THIS specific ad
       const shareUrl = `${window.location.origin}?ad_id=${ad.id}`;
-      
       const shareText = `🔥 *Safe Land Deal Alert* 🔥\n\n💎 *Price:* ${ad.price}\n📏 *Size:* ${ad.size}\n📍 *Verified Location:* ${shareUrl}`;
       
-      // 1. Try Mobile Native Share
       if (navigator.share) {
-          try {
-              await navigator.share({
-                  title: 'Safe Land Deal',
-                  text: shareText,
-                  url: shareUrl
-              });
-          } catch (error) { console.log('Error sharing', error); }
+          try { await navigator.share({ title: 'Safe Land Deal', text: shareText, url: shareUrl }); } 
+          catch (error) { console.log('Error sharing', error); }
       } else {
-          // 2. Fallback to WhatsApp Web
           window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
       }
   };
@@ -354,7 +341,6 @@ const RealEstateSearchApp = () => {
         </div>
 
         <div className="flex gap-2 items-center">
-            {/* SEARCH BAR */}
             <div className="hidden md:flex bg-slate-800 px-3 py-1.5 rounded-full items-center gap-2 border border-slate-700">
                 <Search size={14} className="text-gray-400"/>
                 <input placeholder="Search..." className="bg-transparent outline-none text-sm w-32 text-white placeholder-gray-500"
@@ -371,7 +357,6 @@ const RealEstateSearchApp = () => {
             <button onClick={() => setShowPremiumRequest(true)} className="bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-400 hover:to-yellow-600 text-white p-2 md:px-4 md:py-2 rounded-lg font-bold text-xs flex items-center gap-2 shadow-lg">
                 <ShieldCheck size={14}/> <span className="hidden md:inline">Request Audit</span>
             </button>
-            
             <button onClick={() => setShowPinModal(true)} className={`p-2 rounded-lg transition-all ${isAdmin ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
                 {isAdmin ? <Unlock size={16}/> : <Lock size={16}/>}
             </button>
@@ -452,7 +437,6 @@ const RealEstateSearchApp = () => {
         /* --- MAP VIEW --- */
         <div className="flex-1 relative z-0">
           <MapContainer center={[17.0500, 78.5500]} zoom={13} maxZoom={22} style={{ height: "100%", width: "100%" }}>
-            
             <LayersControl position="topright">
                 <LayersControl.BaseLayer checked name="Satellite (Clean)">
                     <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri" maxNativeZoom={18} maxZoom={22} />
@@ -512,7 +496,7 @@ const RealEstateSearchApp = () => {
                     {ad.points && <Polygon positions={ad.points} pathOptions={{ color: 'yellow', fillColor: 'yellow', fillOpacity: 0.2 }} />}
                 </React.Fragment>
             ))}
-            {/* ... Other map logic ... */}
+            
             {viewMode === 'VENTURE' && (
                 <FeatureGroup ref={featureGroupRef}>
                     <EditControl position="topright" onCreated={(e)=>{setCurrentShape(e); setShowSaveForm(true);}} draw={{ rectangle: false, polygon: { allowIntersection: false, showArea: false }, circle: false, circlemarker: false, marker: false, polyline: false }} />
@@ -551,10 +535,12 @@ const RealEstateSearchApp = () => {
                               <h2 className="text-2xl font-black text-slate-800">{viewingAd.price}</h2>
                               <p className="text-sm font-bold text-slate-500">{viewingAd.size} | {viewingAd.ad_type}</p>
                           </div>
-                          <div className="bg-blue-50 text-blue-700 p-2 rounded-lg text-xs font-bold text-center">
+                          
+                          {/* UPDATED: VIEW MAP BUTTON (NOW FUNCTIONAL) */}
+                          <button onClick={() => setViewingAd(null)} className="bg-blue-50 text-blue-700 p-2 rounded-lg text-xs font-bold text-center hover:bg-blue-100 transition-colors">
                               <MapPin size={16} className="mx-auto mb-1"/>
                               View Map
-                          </div>
+                          </button>
                       </div>
 
                       {viewingAd.description && <p className="text-xs text-gray-600 mb-4 bg-slate-50 p-2 rounded border">{viewingAd.description}</p>}
@@ -596,8 +582,6 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
-      {/* ... [KEEP ALL OTHER EXISTING MODALS: Edit, Post, Share, etc. unchanged below] ... */}
-      
       {/* --- NEW: EDIT AD MODAL (UPDATED WITH AUDIO) --- */}
       {editingAd && (
           <div className="fixed inset-0 bg-black/60 z-[9999] flex justify-center items-center backdrop-blur-sm p-4">
@@ -630,7 +614,7 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
-      {/* --- POST AD MODAL (NEW: TEXTAREA + AUDIO) --- */}
+      {/* --- POST AD MODAL --- */}
       {newAdLocation && (
           <div className="fixed bottom-4 left-4 z-[5000] bg-white p-4 rounded-xl shadow-2xl w-80 border-2 border-blue-500 animate-in slide-in-from-bottom-10 max-h-[90vh] overflow-y-auto">
                <h3 className="font-bold text-blue-600 mb-2">Post New Ad</h3>
