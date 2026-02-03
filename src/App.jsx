@@ -24,7 +24,7 @@ const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// --- OFFICIAL LINKS (PUBLIC) ---
+// --- OFFICIAL LINKS (For Admin Use Only) ---
 const GOVT_LINKS = [
     { name: "Bhubharathi (Land Status)", url: "https://bhubharati.telangana.gov.in/knowLandStatus" },
     { name: "IGRS (EC Search)", url: "https://registration.telangana.gov.in/" },
@@ -63,7 +63,7 @@ const RealEstateSearchApp = () => {
 
   // MODALS
   const [showLinksModal, setShowLinksModal] = useState(false); 
-  const [showPremiumRequest, setShowPremiumRequest] = useState(false); // NEW: Request Audit Modal
+  const [showPremiumRequest, setShowPremiumRequest] = useState(false); 
 
   // DASHBOARD FILTERS
   const [filterText, setFilterText] = useState('');
@@ -175,29 +175,30 @@ const RealEstateSearchApp = () => {
     } catch (err) { alert("Error saving shape."); }
   };
 
-  // --- PDF GENERATOR (SAMPLE & REAL) ---
+  // --- PDF GENERATOR (CLEAN & OFFICIAL) ---
   const generatePDF = (isSample = false) => {
     const doc = new jsPDF();
     const date = new Date().toLocaleDateString();
     
-    // DATA SOURCE: Real vs Sample
+    // DATA SOURCE
     const data = isSample ? {
         approval: 'HMDA', rera: 'P02400001234', bankLoan: true, zone: 'Residential Zone 1',
         orrStatus: 'Growth Corridor', orrDist: '2.5', devPace: 'Rapid',
         price: '45000', govtValue: '12000'
     } : ratingData;
 
-    doc.setFillColor(25, 25, 112); doc.rect(0, 0, 210, 45, 'F');
+    // 1. HEADER
+    doc.setFillColor(25, 25, 112); doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255); doc.setFontSize(24); doc.setFont("helvetica", "bold");
     doc.text("SAFE LAND DEAL", 15, 20);
     doc.setFontSize(10); doc.text(isSample ? "SAMPLE INVESTMENT AUDIT REPORT" : "TELANGANA INVESTMENT AUDIT REPORT", 15, 30);
     doc.text(`Generated: ${date}`, 160, 30);
     
-    // Add Official Links to PDF
-    doc.setFontSize(10); doc.setTextColor(100,100,255);
-    doc.textWithLink("Verify on Dharani", 15, 40, { url: GOVT_LINKS[0].url });
-    doc.textWithLink("Verify on RERA", 60, 40, { url: GOVT_LINKS[4].url });
+    // 2. REMOVED LINKS - REPLACED WITH OFFICIAL TEXT
+    doc.setTextColor(100, 100, 100); doc.setFontSize(9);
+    doc.text("This report is generated based on verified government records (Dharani, RERA, HMDA).", 15, 48);
     
+    // 3. SECTIONS
     doc.setTextColor(0, 0, 0); doc.setFontSize(14); doc.setFont("helvetica", "bold");
     doc.text("1. Regulatory & Zoning Analysis", 15, 60);
     autoTable(doc, {
@@ -209,6 +210,7 @@ const RealEstateSearchApp = () => {
         ['Zone Type', data.zone, 'Verified']
       ], theme: 'grid', headStyles: { fillColor: [46, 204, 113] }
     });
+
     const locY = doc.lastAutoTable.finalY + 15;
     doc.text("2. Location & Connectivity", 15, locY);
     autoTable(doc, {
@@ -219,6 +221,7 @@ const RealEstateSearchApp = () => {
         ['Development Pace', data.devPace, data.devPace === 'Rapid' ? 'Fast Appreciation' : 'Long Term Hold']
       ], theme: 'striped'
     });
+
     const finY = doc.lastAutoTable.finalY + 15;
     doc.text("3. Financial Valuation", 15, finY);
     autoTable(doc, {
@@ -230,7 +233,7 @@ const RealEstateSearchApp = () => {
       ], theme: 'plain'
     });
     
-    // SAMPLE WATERMARK
+    // 4. WATERMARK (For Sample Only)
     if(isSample) {
         doc.setTextColor(200, 200, 200); doc.setFontSize(60); doc.saveGraphicsState();
         doc.setGState(new doc.GState({opacity: 0.2}));
@@ -238,6 +241,7 @@ const RealEstateSearchApp = () => {
         doc.restoreGraphicsState();
     }
 
+    // 5. SCORE CARD
     let score = 40; 
     if(data.approval === 'HMDA') score += 20;
     if(data.approval === 'DTCP') score += 15;
@@ -253,6 +257,11 @@ const RealEstateSearchApp = () => {
     doc.text(`${finalScore}/100`, 160, scoreY + 22);
     doc.setFontSize(12); doc.setTextColor(50,50,50);
     doc.text("SAFE LAND SCORE™", 25, scoreY + 18);
+    
+    // 6. DISCLAIMER (Professional Footer)
+    doc.setFontSize(8); doc.setTextColor(150,150,150);
+    doc.text("Disclaimer: This audit is an expert analysis based on available data. Market prices fluctuate.", 15, 280);
+
     doc.save(isSample ? "Sample_Audit_Report.pdf" : `Audit_Report_${date}.pdf`);
   };
 
@@ -315,7 +324,7 @@ const RealEstateSearchApp = () => {
                     }}
                 />
             </div>
-            {/* NEW: PREMIUM AUDIT BUTTON (PUBLIC) */}
+            {/* PREMIUM AUDIT BUTTON (PUBLIC) */}
             <button onClick={() => setShowPremiumRequest(true)} className="bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-400 hover:to-yellow-600 text-white p-2 md:px-4 md:py-2 rounded-lg font-bold text-xs flex items-center gap-2 shadow-lg animate-pulse">
                 <ShieldCheck size={14}/> <span className="hidden md:inline">Request Audit</span>
             </button>
@@ -399,7 +408,6 @@ const RealEstateSearchApp = () => {
         <div className="flex-1 relative z-0">
           <MapContainer center={[17.0500, 78.5500]} zoom={13} maxZoom={22} style={{ height: "100%", width: "100%" }}>
             
-            {/* NEW: MAP LAYERS CONTROL (Satellite vs Hybrid/Street) */}
             <LayersControl position="topright">
                 <LayersControl.BaseLayer checked name="Satellite (Clean)">
                     <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri" maxNativeZoom={18} maxZoom={22} />
@@ -474,7 +482,7 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
-      {/* --- NEW: PREMIUM AUDIT REQUEST MODAL --- */}
+      {/* --- PREMIUM AUDIT REQUEST MODAL (SALES FUNNEL) --- */}
       {showPremiumRequest && (
           <div className="fixed inset-0 bg-black/70 z-[8000] flex justify-center items-center p-4 backdrop-blur-sm animate-in fade-in">
               <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
@@ -490,7 +498,7 @@ const RealEstateSearchApp = () => {
                           <p className="font-bold flex items-center gap-2">✅ Zoning Check (RERA, HMDA, FTL)</p>
                       </div>
                       
-                      {/* DOWNLOAD SAMPLE BUTTON */}
+                      {/* SAMPLE REPORT DOWNLOAD */}
                       <button 
                         onClick={() => generatePDF(true)} 
                         className="w-full border-2 border-dashed border-gray-300 py-3 rounded-lg text-gray-500 font-bold hover:bg-gray-50 hover:border-gray-400 hover:text-gray-700 transition-all flex items-center justify-center gap-2"
