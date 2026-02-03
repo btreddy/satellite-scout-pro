@@ -13,7 +13,7 @@ import {
   X, Crosshair, Search, Zap, Radar, FileText, Lock, Unlock, 
   Map as MapIcon, MessageCircle, Store, PenTool, Save, Eye,
   CheckCircle, Trash2, ExternalLink, ShieldCheck, List, Filter, 
-  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video, UploadCloud, Edit, Mic, Share2
+  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video, UploadCloud, Edit, Mic, Share2, MapPin
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -60,10 +60,13 @@ const RealEstateSearchApp = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [tempSearchMarker, setTempSearchMarker] = useState(null);
 
-  // MODALS
+  // MODALS & VIEWS
   const [showLinksModal, setShowLinksModal] = useState(false); 
   const [showPremiumRequest, setShowPremiumRequest] = useState(false); 
   const [editingAd, setEditingAd] = useState(null);
+  
+  // NEW: "Landing Page" View for specific ads
+  const [viewingAd, setViewingAd] = useState(null); 
 
   // DASHBOARD FILTERS
   const [filterText, setFilterText] = useState('');
@@ -88,17 +91,34 @@ const RealEstateSearchApp = () => {
   const [currentShape, setCurrentShape] = useState(null); 
   const featureGroupRef = useRef(); 
 
-  // AUDIT (ADMIN)
+  // AUDIT
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [ratingData, setRatingData] = useState({ 
       price: '', govtValue: '', rera: '', approval: 'HMDA', orrDist: '', orrStatus: 'Out', 
       bankLoan: false, devPace: 'Moderate', legal: 'Clear', zone: 'Residential'     
   });
 
+  // --- INITIALIZATION ---
   useEffect(() => {
     fetchMarketplaceAds();
     fetchProjects();
   }, [isAdmin]);
+
+  // --- DEEP LINK HANDLER ---
+  // When ads are fetched, check if the URL has an ?ad_id=XYZ parameter
+  useEffect(() => {
+      if (marketAds.length > 0) {
+          const params = new URLSearchParams(window.location.search);
+          const sharedAdId = params.get('ad_id');
+          if (sharedAdId) {
+              const foundAd = marketAds.find(ad => ad.id.toString() === sharedAdId);
+              if (foundAd) {
+                  setViewingAd(foundAd); // Open the "Welcome Card"
+                  setTempSearchMarker([foundAd.lat, foundAd.lng]); // Fly to location
+              }
+          }
+      }
+  }, [marketAds]);
 
   // --- DB FUNCTIONS ---
   const fetchMarketplaceAds = async () => {
@@ -205,22 +225,24 @@ const RealEstateSearchApp = () => {
       }
   };
 
+  // --- SMART SHARE FUNCTION ---
   const handleShareAd = async (ad) => {
-      const shareText = `🔥 *Safe Land Deal Alert* 🔥\n\n💎 *Price:* ${ad.price}\n📏 *Size:* ${ad.size}\n📞 *Contact:* ${ad.contact_info}\n\n📍 *View Location on Map:*\nhttps://www.google.com/maps?q=${ad.lat},${ad.lng}\n\n(Verified by Safe Land Console)`;
+      // Create a Deep Link that opens THIS specific ad
+      const shareUrl = `${window.location.origin}?ad_id=${ad.id}`;
       
-      // Mobile Native Share
+      const shareText = `🔥 *Safe Land Deal Alert* 🔥\n\n💎 *Price:* ${ad.price}\n📏 *Size:* ${ad.size}\n📍 *Verified Location:* ${shareUrl}`;
+      
+      // 1. Try Mobile Native Share
       if (navigator.share) {
           try {
               await navigator.share({
                   title: 'Safe Land Deal',
                   text: shareText,
-                  url: window.location.href
+                  url: shareUrl
               });
-          } catch (error) {
-              console.log('Error sharing', error);
-          }
+          } catch (error) { console.log('Error sharing', error); }
       } else {
-          // Desktop Fallback (WhatsApp Web)
+          // 2. Fallback to WhatsApp Web
           window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
       }
   };
@@ -507,6 +529,50 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
+      {/* --- NEW: "LANDING PAGE" WELCOME CARD --- */}
+      {viewingAd && (
+          <div className="fixed inset-0 bg-black/70 z-[9999] flex justify-center items-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white p-0 rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
+                  {/* HERO IMAGE */}
+                  <div className="h-48 relative bg-gray-100">
+                      {viewingAd.image_url ? (
+                          <img src={viewingAd.image_url} alt="Land" className="w-full h-full object-cover"/>
+                      ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold bg-slate-100">NO IMAGE</div>
+                      )}
+                      <button onClick={()=>setViewingAd(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"><X size={20}/></button>
+                      <div className="absolute bottom-2 left-2 bg-green-600 text-white px-2 py-1 text-xs font-bold rounded flex items-center gap-1"><ShieldCheck size={12}/> VERIFIED LISTING</div>
+                  </div>
+                  
+                  {/* DETAILS */}
+                  <div className="p-5">
+                      <div className="flex justify-between items-start mb-2">
+                          <div>
+                              <h2 className="text-2xl font-black text-slate-800">{viewingAd.price}</h2>
+                              <p className="text-sm font-bold text-slate-500">{viewingAd.size} | {viewingAd.ad_type}</p>
+                          </div>
+                          <div className="bg-blue-50 text-blue-700 p-2 rounded-lg text-xs font-bold text-center">
+                              <MapPin size={16} className="mx-auto mb-1"/>
+                              View Map
+                          </div>
+                      </div>
+
+                      {viewingAd.description && <p className="text-xs text-gray-600 mb-4 bg-slate-50 p-2 rounded border">{viewingAd.description}</p>}
+
+                      {/* ACTIONS */}
+                      <div className="space-y-2">
+                          <button onClick={() => window.open(`https://wa.me/${viewingAd.contact_info}`, '_blank')} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-green-700"><MessageCircle size={18}/> Contact Owner</button>
+                          
+                          <div className="flex gap-2">
+                              {viewingAd.video_url && <button onClick={() => window.open(viewingAd.video_url, '_blank')} className="flex-1 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 hover:bg-red-100"><Video size={14}/> Watch Video</button>}
+                              <button onClick={() => setViewingAd(null)} className="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg font-bold text-xs hover:bg-slate-200">Explore Map</button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* --- SUB-TOOLBAR --- */}
       {viewMode !== 'ADMIN' && (
         <div className="bg-white border-b px-4 py-2 flex gap-3 items-center text-xs overflow-x-auto shadow-sm">
@@ -530,6 +596,8 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
+      {/* ... [KEEP ALL OTHER EXISTING MODALS: Edit, Post, Share, etc. unchanged below] ... */}
+      
       {/* --- NEW: EDIT AD MODAL (UPDATED WITH AUDIO) --- */}
       {editingAd && (
           <div className="fixed inset-0 bg-black/60 z-[9999] flex justify-center items-center backdrop-blur-sm p-4">
