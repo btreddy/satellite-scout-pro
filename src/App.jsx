@@ -13,7 +13,7 @@ import {
   X, Crosshair, Search, Zap, Radar, FileText, Lock, Unlock, 
   Map as MapIcon, MessageCircle, Store, PenTool, Save, Eye,
   CheckCircle, Trash2, ExternalLink, ShieldCheck, List, Filter, 
-  RefreshCw, Globe, PlusCircle, Layers, Award, Download
+  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -24,15 +24,14 @@ const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// --- OFFICIAL LINKS (For Admin Use Only) ---
+// --- OFFICIAL LINKS (UPDATED 2026) ---
 const GOVT_LINKS = [
     { name: "Bhubharathi (Land Status)", url: "https://bhubharati.telangana.gov.in/knowLandStatus" },
+    { name: "CCLA (Integrated Registry)", url: "https://ccla.telangana.gov.in/integratedLandRegistry.do" },
     { name: "IGRS (EC Search)", url: "https://registration.telangana.gov.in/" },
-    { name: "Bhuvan (ISRO Maps)", url: "https://bhuvan.nrsc.gov.in/" },
-    { name: "TMZP (Master Plan)", url: "https://planningservices.telangana.gov.in/" },
+    { name: "HMDA Master Plan 2031", url: "https://www.hmda.gov.in/master-planning-2031" },
     { name: "RERA Telangana", url: "https://rera.telangana.gov.in/" },
-    { name: "HMDA Official", url: "https://www.hmda.gov.in/" },
-    { name: "YTDA", url: "http://ytda.telangana.gov.in/" }
+    { name: "Bhuvan (ISRO Maps)", url: "https://bhuvan.nrsc.gov.in/" }
 ];
 
 const DefaultIcon = L.icon({
@@ -73,7 +72,13 @@ const RealEstateSearchApp = () => {
   const [adMode, setAdMode] = useState(null); 
   const [newAdLocation, setNewAdLocation] = useState(null);
   const [marketAds, setMarketAds] = useState([]);
-  const [newAdData, setNewAdData] = useState({ type: 'SELL', size: '', price: '', contact: '', desc: '', size_unit: 'Sq Yds' });
+  
+  // NEW AD DATA (Updated with Image/Video)
+  const [newAdData, setNewAdData] = useState({ 
+      type: 'SELL', size: '', price: '', contact: '', desc: '', 
+      size_unit: 'Sq Yds', image_url: '', video_url: '' 
+  });
+  
   const [radarResults, setRadarResults] = useState(null);
 
   // VENTURE
@@ -115,18 +120,22 @@ const RealEstateSearchApp = () => {
         [newAdLocation.lat - offset, newAdLocation.lng + offset],
         [newAdLocation.lat - offset, newAdLocation.lng - offset]
     ];
+    
+    // Insert new fields (image_url, video_url)
     const newAd = {
         lat: newAdLocation.lat, lng: newAdLocation.lng,
         ad_type: newAdData.type, size: newAdData.size + ' ' + newAdData.size_unit,
         price: newAdData.price, contact_info: newAdData.contact, description: newAdData.desc,
+        image_url: newAdData.image_url, video_url: newAdData.video_url,
         status: 'PENDING', points: points
     };
+    
     const { error } = await supabase.from('marketplace_ads').insert([newAd]);
     if (!error) { 
         alert("✅ Ad Submitted! Waiting for Admin Approval."); 
         setAdMode(null); setNewAdLocation(null); fetchMarketplaceAds(); 
     } else {
-        alert("Submission Failed. Check Database Policy.");
+        alert(`Submission Failed: ${error.message}`);
     }
   };
 
@@ -180,25 +189,21 @@ const RealEstateSearchApp = () => {
     const doc = new jsPDF();
     const date = new Date().toLocaleDateString();
     
-    // DATA SOURCE
     const data = isSample ? {
         approval: 'HMDA', rera: 'P02400001234', bankLoan: true, zone: 'Residential Zone 1',
         orrStatus: 'Growth Corridor', orrDist: '2.5', devPace: 'Rapid',
         price: '45000', govtValue: '12000'
     } : ratingData;
 
-    // 1. HEADER
     doc.setFillColor(25, 25, 112); doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255); doc.setFontSize(24); doc.setFont("helvetica", "bold");
     doc.text("SAFE LAND DEAL", 15, 20);
     doc.setFontSize(10); doc.text(isSample ? "SAMPLE INVESTMENT AUDIT REPORT" : "TELANGANA INVESTMENT AUDIT REPORT", 15, 30);
     doc.text(`Generated: ${date}`, 160, 30);
     
-    // 2. REMOVED LINKS - REPLACED WITH OFFICIAL TEXT
     doc.setTextColor(100, 100, 100); doc.setFontSize(9);
-    doc.text("This report is generated based on verified government records (Dharani, RERA, HMDA).", 15, 48);
+    doc.text("This report is generated based on verified government records (CCLA, HMDA, RERA).", 15, 48);
     
-    // 3. SECTIONS
     doc.setTextColor(0, 0, 0); doc.setFontSize(14); doc.setFont("helvetica", "bold");
     doc.text("1. Regulatory & Zoning Analysis", 15, 60);
     autoTable(doc, {
@@ -233,7 +238,6 @@ const RealEstateSearchApp = () => {
       ], theme: 'plain'
     });
     
-    // 4. WATERMARK (For Sample Only)
     if(isSample) {
         doc.setTextColor(200, 200, 200); doc.setFontSize(60); doc.saveGraphicsState();
         doc.setGState(new doc.GState({opacity: 0.2}));
@@ -241,7 +245,6 @@ const RealEstateSearchApp = () => {
         doc.restoreGraphicsState();
     }
 
-    // 5. SCORE CARD
     let score = 40; 
     if(data.approval === 'HMDA') score += 20;
     if(data.approval === 'DTCP') score += 15;
@@ -258,7 +261,6 @@ const RealEstateSearchApp = () => {
     doc.setFontSize(12); doc.setTextColor(50,50,50);
     doc.text("SAFE LAND SCORE™", 25, scoreY + 18);
     
-    // 6. DISCLAIMER (Professional Footer)
     doc.setFontSize(8); doc.setTextColor(150,150,150);
     doc.text("Disclaimer: This audit is an expert analysis based on available data. Market prices fluctuate.", 15, 280);
 
@@ -368,6 +370,7 @@ const RealEstateSearchApp = () => {
                                   <th className="p-4">Type</th>
                                   <th className="p-4">Details</th>
                                   <th className="p-4">Contact</th>
+                                  <th className="p-4">Assets</th>
                                   <th className="p-4">Status</th>
                                   <th className="p-4 text-right">Actions</th>
                               </tr>
@@ -388,6 +391,10 @@ const RealEstateSearchApp = () => {
                                           <div className="text-gray-500 text-xs">{ad.size}</div>
                                       </td>
                                       <td className="p-4">{ad.contact_info}</td>
+                                      <td className="p-4 text-xs">
+                                          {ad.image_url ? <a href={ad.image_url} target="_blank" className="text-blue-600 flex items-center gap-1"><ImageIcon size={12}/> Img</a> : <span className="text-gray-300">-</span>}
+                                          {ad.video_url ? <a href={ad.video_url} target="_blank" className="text-red-600 flex items-center gap-1 mt-1"><Video size={12}/> Vid</a> : null}
+                                      </td>
                                       <td className="p-4">
                                           {ad.status === 'APPROVED' ? <span className="flex items-center gap-1 text-green-600 font-bold text-xs"><CheckCircle size={12}/> Live</span> : <span className="text-orange-500 font-bold text-xs">Pending</span>}
                                       </td>
@@ -427,11 +434,24 @@ const RealEstateSearchApp = () => {
                     <Marker position={[ad.lat, ad.lng]} icon={DefaultIcon}>
                       <Popup className="premium-popup">
                           <div className="min-w-[200px]">
-                              <div className="bg-slate-100 h-24 rounded-t-lg flex items-center justify-center text-slate-400 font-bold text-xs">NO IMAGE</div>
+                              {/* DYNAMIC IMAGE DISPLAY */}
+                              {ad.image_url ? (
+                                  <img src={ad.image_url} alt="Plot" className="w-full h-32 object-cover rounded-t-lg bg-gray-100"/>
+                              ) : (
+                                  <div className="bg-slate-100 h-24 rounded-t-lg flex items-center justify-center text-slate-400 font-bold text-xs">NO IMAGE</div>
+                              )}
+                              
                               <div className="p-3">
                                   <h3 className="font-bold text-lg text-green-700">{ad.price}</h3>
                                   <p className="text-xs text-gray-500 mb-2">{ad.size} | {ad.ad_type}</p>
-                                  <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="w-full bg-green-600 text-white py-1 rounded text-xs font-bold mb-1">WhatsApp Owner</button>
+                                  
+                                  <div className="flex gap-2 mb-2">
+                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="flex-1 bg-green-600 text-white py-1 rounded text-xs font-bold">WhatsApp</button>
+                                      {/* DYNAMIC VIDEO BUTTON */}
+                                      {ad.video_url && (
+                                          <button onClick={() => window.open(ad.video_url, '_blank')} className="flex-1 bg-red-600 text-white py-1 rounded text-xs font-bold flex items-center justify-center gap-1"><Video size={10}/> Watch</button>
+                                      )}
+                                  </div>
                               </div>
                           </div>
                       </Popup>
@@ -469,7 +489,6 @@ const RealEstateSearchApp = () => {
                       {adMode ? <X size={12}/> : <PlusCircle size={12}/>}
                       {adMode ? 'Cancel Posting' : 'Post Free Ad'}
                   </button>
-                  {/* PUBLIC LINKS TRIGGER */}
                   <button onClick={() => setShowLinksModal(true)} className="px-3 py-1 rounded border border-gray-200 bg-gray-50 text-gray-700 font-bold flex items-center gap-1 hover:bg-gray-100"><Globe size={12}/> Verify Land</button>
                 </>
             )}
@@ -482,7 +501,7 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
-      {/* --- PREMIUM AUDIT REQUEST MODAL (SALES FUNNEL) --- */}
+      {/* --- PREMIUM AUDIT REQUEST MODAL --- */}
       {showPremiumRequest && (
           <div className="fixed inset-0 bg-black/70 z-[8000] flex justify-center items-center p-4 backdrop-blur-sm animate-in fade-in">
               <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
@@ -497,21 +516,10 @@ const RealEstateSearchApp = () => {
                           <p className="font-bold flex items-center gap-2">✅ Market Valuation (Govt vs Market Price)</p>
                           <p className="font-bold flex items-center gap-2">✅ Zoning Check (RERA, HMDA, FTL)</p>
                       </div>
-                      
-                      {/* SAMPLE REPORT DOWNLOAD */}
-                      <button 
-                        onClick={() => generatePDF(true)} 
-                        className="w-full border-2 border-dashed border-gray-300 py-3 rounded-lg text-gray-500 font-bold hover:bg-gray-50 hover:border-gray-400 hover:text-gray-700 transition-all flex items-center justify-center gap-2"
-                      >
+                      <button onClick={() => generatePDF(true)} className="w-full border-2 border-dashed border-gray-300 py-3 rounded-lg text-gray-500 font-bold hover:bg-gray-50 hover:border-gray-400 flex items-center justify-center gap-2">
                           <Download size={16}/> Download Model Report (PDF)
                       </button>
-
-                      <div className="text-center text-xs text-gray-400 my-2">- Ready to proceed? -</div>
-                      
-                      <button 
-                        onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=I am interested in a Premium Land Audit. Please send details.`, '_blank')}
-                        className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg shadow-lg hover:bg-green-700 hover:scale-[1.02] transition-transform flex items-center justify-center gap-2"
-                      >
+                      <button onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=I am interested in a Premium Land Audit.`, '_blank')} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg shadow-lg hover:bg-green-700 flex items-center justify-center gap-2">
                          <MessageCircle size={20}/> Request Audit on WhatsApp
                       </button>
                   </div>
@@ -520,7 +528,7 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
-      {/* --- OTHER MODALS --- */}
+      {/* --- OFFICIAL LINKS MODAL --- */}
       {showLinksModal && (
           <div className="fixed inset-0 bg-black/60 z-[9999] flex justify-center items-center backdrop-blur-sm p-4">
               <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl">
@@ -535,7 +543,6 @@ const RealEstateSearchApp = () => {
                           </a>
                       ))}
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-4 text-center">Data provided by Telangana Govt portals. Use for verification only.</p>
               </div>
           </div>
       )}
@@ -550,15 +557,23 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
+      {/* --- POST AD MODAL (NEW: WITH IMAGE & VIDEO) --- */}
       {newAdLocation && (
           <div className="fixed bottom-4 left-4 z-[5000] bg-white p-4 rounded-xl shadow-2xl w-80 border-2 border-blue-500 animate-in slide-in-from-bottom-10">
                <h3 className="font-bold text-blue-600 mb-2">Post New Ad</h3>
                <div className="space-y-2">
-                   <select className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, type: e.target.value})}><option value="SELL">Sell Plot</option><option value="LOOKING">Looking For</option></select>
-                   <input placeholder="Size (e.g. 200)" type="number" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, size: e.target.value})} />
-                   <input placeholder="Price (e.g. 1.5 Cr)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, price: e.target.value})} />
+                   <select className="w-full border p-2 rounded text-sm font-bold" onChange={e => setNewAdData({...newAdData, type: e.target.value})}><option value="SELL">Sell Plot</option><option value="LOOKING">Looking For</option></select>
+                   <div className="flex gap-2">
+                       <input placeholder="Size (e.g. 200)" type="number" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, size: e.target.value})} />
+                       <input placeholder="Price (e.g. 1.5 Cr)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, price: e.target.value})} />
+                   </div>
                    <input placeholder="WhatsApp (e.g. 9198...)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, contact: e.target.value})} />
-                   <button onClick={handlePostAd} className="w-full bg-blue-600 text-white py-2 rounded font-bold">Submit</button>
+                   
+                   {/* NEW FIELDS */}
+                   <input placeholder="Image Link (https://...)" className="w-full border p-2 rounded text-sm bg-gray-50" onChange={e => setNewAdData({...newAdData, image_url: e.target.value})} />
+                   <input placeholder="Video Link (YouTube...)" className="w-full border p-2 rounded text-sm bg-gray-50" onChange={e => setNewAdData({...newAdData, video_url: e.target.value})} />
+                   
+                   <button onClick={handlePostAd} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Submit Ad</button>
                </div>
           </div>
       )}
