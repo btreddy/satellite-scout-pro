@@ -13,7 +13,7 @@ import {
   X, Crosshair, Search, Zap, Radar, FileText, Lock, Unlock, 
   Map as MapIcon, MessageCircle, Store, PenTool, Save, Eye,
   CheckCircle, Trash2, ExternalLink, ShieldCheck, List, Filter, 
-  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video
+  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video, UploadCloud
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -24,7 +24,7 @@ const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// --- OFFICIAL LINKS (UPDATED 2026) ---
+// --- OFFICIAL LINKS (UPDATED) ---
 const GOVT_LINKS = [
     { name: "Bhubharathi (Land Status)", url: "https://bhubharati.telangana.gov.in/knowLandStatus" },
     { name: "CCLA (Integrated Registry)", url: "https://ccla.telangana.gov.in/integratedLandRegistry.do" },
@@ -73,11 +73,12 @@ const RealEstateSearchApp = () => {
   const [newAdLocation, setNewAdLocation] = useState(null);
   const [marketAds, setMarketAds] = useState([]);
   
-  // NEW AD DATA (Updated with Image/Video)
+  // NEW AD DATA
   const [newAdData, setNewAdData] = useState({ 
       type: 'SELL', size: '', price: '', contact: '', desc: '', 
       size_unit: 'Sq Yds', image_url: '', video_url: '' 
   });
+  const [uploading, setUploading] = useState(false); // Upload Spinner
   
   const [radarResults, setRadarResults] = useState(null);
 
@@ -109,8 +110,41 @@ const RealEstateSearchApp = () => {
     } catch(e) { console.error(e); }
   };
 
+  // --- IMAGE UPLOAD FUNCTION ---
+  const handleImageUpload = async (e) => {
+    try {
+        setUploading(true);
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // 1. Upload File
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage.from('ad-images').upload(filePath, file);
+
+        if (uploadError) {
+            throw uploadError;
+        }
+
+        // 2. Get Public URL
+        const { data } = supabase.storage.from('ad-images').getPublicUrl(filePath);
+        
+        // 3. Set State
+        setNewAdData({ ...newAdData, image_url: data.publicUrl });
+        alert("✅ Image Uploaded Successfully!");
+    } catch (error) {
+        alert("Upload Failed: " + error.message);
+    } finally {
+        setUploading(false);
+    }
+  };
+
   const handlePostAd = async () => {
     if(!newAdLocation) return alert("Set location first.");
+    if(uploading) return alert("Please wait for image to finish uploading.");
+
     const sizeInSqMeters = parseInt(newAdData.size) * 0.836127; 
     const sideLength = Math.sqrt(sizeInSqMeters); 
     const offset = (sideLength / 2) / 111139; 
@@ -121,7 +155,6 @@ const RealEstateSearchApp = () => {
         [newAdLocation.lat - offset, newAdLocation.lng - offset]
     ];
     
-    // Insert new fields (image_url, video_url)
     const newAd = {
         lat: newAdLocation.lat, lng: newAdLocation.lng,
         ad_type: newAdData.type, size: newAdData.size + ' ' + newAdData.size_unit,
@@ -184,7 +217,7 @@ const RealEstateSearchApp = () => {
     } catch (err) { alert("Error saving shape."); }
   };
 
-  // --- PDF GENERATOR (CLEAN & OFFICIAL) ---
+  // --- PDF GENERATOR ---
   const generatePDF = (isSample = false) => {
     const doc = new jsPDF();
     const date = new Date().toLocaleDateString();
@@ -557,7 +590,7 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
-      {/* --- POST AD MODAL (NEW: WITH IMAGE & VIDEO) --- */}
+      {/* --- POST AD MODAL (WITH FILE UPLOAD) --- */}
       {newAdLocation && (
           <div className="fixed bottom-4 left-4 z-[5000] bg-white p-4 rounded-xl shadow-2xl w-80 border-2 border-blue-500 animate-in slide-in-from-bottom-10">
                <h3 className="font-bold text-blue-600 mb-2">Post New Ad</h3>
@@ -569,11 +602,24 @@ const RealEstateSearchApp = () => {
                    </div>
                    <input placeholder="WhatsApp (e.g. 9198...)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, contact: e.target.value})} />
                    
-                   {/* NEW FIELDS */}
-                   <input placeholder="Image Link (https://...)" className="w-full border p-2 rounded text-sm bg-gray-50" onChange={e => setNewAdData({...newAdData, image_url: e.target.value})} />
+                   {/* IMAGE UPLOAD FIELD */}
+                   <div className="border border-dashed border-gray-300 p-2 rounded bg-gray-50 text-center">
+                       {uploading ? (
+                           <span className="text-xs font-bold text-blue-500 animate-pulse">Uploading Image...</span>
+                       ) : (
+                           <>
+                            <label className="text-xs font-bold text-gray-500 flex items-center justify-center gap-1 cursor-pointer">
+                                <UploadCloud size={14}/> {newAdData.image_url ? "Change Image" : "Upload Plot Photo"}
+                                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                            </label>
+                            {newAdData.image_url && <span className="text-[10px] text-green-600 block mt-1">✅ Image Ready</span>}
+                           </>
+                       )}
+                   </div>
+
                    <input placeholder="Video Link (YouTube...)" className="w-full border p-2 rounded text-sm bg-gray-50" onChange={e => setNewAdData({...newAdData, video_url: e.target.value})} />
                    
-                   <button onClick={handlePostAd} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Submit Ad</button>
+                   <button onClick={handlePostAd} disabled={uploading} className={`w-full text-white py-2 rounded font-bold ${uploading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}>Submit Ad</button>
                </div>
           </div>
       )}
