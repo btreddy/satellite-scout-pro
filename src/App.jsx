@@ -13,7 +13,7 @@ import {
   X, Crosshair, Search, Zap, Radar, FileText, Lock, Unlock, 
   Map as MapIcon, MessageCircle, Store, PenTool, Save, Eye,
   CheckCircle, Trash2, ExternalLink, ShieldCheck, List, Filter, 
-  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video, UploadCloud, Edit
+  RefreshCw, Globe, PlusCircle, Layers, Award, Download, Image as ImageIcon, Video, UploadCloud, Edit, Mic, FileAudio
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -63,7 +63,7 @@ const RealEstateSearchApp = () => {
   // MODALS
   const [showLinksModal, setShowLinksModal] = useState(false); 
   const [showPremiumRequest, setShowPremiumRequest] = useState(false); 
-  const [editingAd, setEditingAd] = useState(null); // NEW: Holds the ad being edited
+  const [editingAd, setEditingAd] = useState(null);
 
   // DASHBOARD FILTERS
   const [filterText, setFilterText] = useState('');
@@ -77,7 +77,7 @@ const RealEstateSearchApp = () => {
   // NEW AD DATA
   const [newAdData, setNewAdData] = useState({ 
       type: 'SELL', size: '', price: '', contact: '', desc: '', 
-      size_unit: 'Sq Yds', image_url: '', video_url: '' 
+      size_unit: 'Sq Yds', image_url: '', video_url: '', audio_url: '' 
   });
   const [uploading, setUploading] = useState(false); 
   const [radarResults, setRadarResults] = useState(null);
@@ -110,14 +110,14 @@ const RealEstateSearchApp = () => {
     } catch(e) { console.error(e); }
   };
 
-  const handleImageUpload = async (e, isEditMode = false) => {
+  const handleFileUpload = async (e, type, isEditMode = false) => {
     try {
         setUploading(true);
         const file = e.target.files[0];
         if (!file) return;
 
         const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
+        const fileName = `${type}_${Math.random()}.${fileExt}`;
         const filePath = `${fileName}`;
 
         const { error: uploadError } = await supabase.storage.from('ad-images').upload(filePath, file);
@@ -125,12 +125,15 @@ const RealEstateSearchApp = () => {
 
         const { data } = supabase.storage.from('ad-images').getPublicUrl(filePath);
         
+        // Update State based on type (image or audio)
         if (isEditMode && editingAd) {
-             setEditingAd({ ...editingAd, image_url: data.publicUrl });
+             if(type === 'image') setEditingAd({ ...editingAd, image_url: data.publicUrl });
+             if(type === 'audio') setEditingAd({ ...editingAd, audio_url: data.publicUrl });
         } else {
-             setNewAdData({ ...newAdData, image_url: data.publicUrl });
+             if(type === 'image') setNewAdData({ ...newAdData, image_url: data.publicUrl });
+             if(type === 'audio') setNewAdData({ ...newAdData, audio_url: data.publicUrl });
         }
-        alert("✅ Image Uploaded!");
+        alert(`✅ ${type === 'image' ? 'Image' : 'Audio'} Uploaded!`);
     } catch (error) {
         alert("Upload Failed: " + error.message);
     } finally {
@@ -156,7 +159,7 @@ const RealEstateSearchApp = () => {
         lat: newAdLocation.lat, lng: newAdLocation.lng,
         ad_type: newAdData.type, size: newAdData.size + ' ' + newAdData.size_unit,
         price: newAdData.price, contact_info: newAdData.contact, description: newAdData.desc,
-        image_url: newAdData.image_url, video_url: newAdData.video_url,
+        image_url: newAdData.image_url, video_url: newAdData.video_url, audio_url: newAdData.audio_url,
         status: 'PENDING', points: points
     };
     
@@ -167,7 +170,6 @@ const RealEstateSearchApp = () => {
     } else { alert(error.message); }
   };
 
-  // --- UPDATE (EDIT) FUNCTION ---
   const handleUpdateAd = async () => {
       if(!editingAd) return;
       const { error } = await supabase.from('marketplace_ads').update({
@@ -176,6 +178,7 @@ const RealEstateSearchApp = () => {
           contact_info: editingAd.contact_info,
           image_url: editingAd.image_url,
           video_url: editingAd.video_url,
+          audio_url: editingAd.audio_url,
           status: editingAd.status
       }).eq('id', editingAd.id);
 
@@ -261,7 +264,7 @@ const RealEstateSearchApp = () => {
         ['Zone Type', data.zone, 'Verified']
       ], theme: 'grid', headStyles: { fillColor: [46, 204, 113] }
     });
-    // ... rest of PDF logic same as before ...
+    // ... rest of PDF logic ...
     doc.save(isSample ? "Sample_Audit_Report.pdf" : `Audit_Report_${date}.pdf`);
   };
 
@@ -349,10 +352,6 @@ const RealEstateSearchApp = () => {
                                   <option value="APPROVED">Live Only</option>
                               </select>
                           </div>
-                          <div className="bg-white border rounded-lg px-2 py-1 flex items-center gap-2 w-48">
-                              <Search size={14} className="text-gray-400"/>
-                              <input placeholder="Search..." className="text-sm outline-none w-full" value={filterText} onChange={(e) => setFilterText(e.target.value)}/>
-                          </div>
                           <button onClick={() => fetchMarketplaceAds()} className="p-2 bg-white border rounded hover:bg-gray-50"><RefreshCw size={16}/></button>
                           <button onClick={() => setShowRatingModal(true)} className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs font-bold flex items-center gap-2 shadow-sm"><ShieldCheck size={14}/> Audit & Links</button>
                       </div>
@@ -390,16 +389,14 @@ const RealEstateSearchApp = () => {
                                       <td className="p-4 text-xs">
                                           {ad.image_url ? <a href={ad.image_url} target="_blank" className="text-blue-600 flex items-center gap-1"><ImageIcon size={12}/> Img</a> : <span className="text-gray-300">-</span>}
                                           {ad.video_url ? <a href={ad.video_url} target="_blank" className="text-red-600 flex items-center gap-1 mt-1"><Video size={12}/> Vid</a> : null}
+                                          {ad.audio_url ? <a href={ad.audio_url} target="_blank" className="text-purple-600 flex items-center gap-1 mt-1"><Mic size={12}/> Aud</a> : null}
                                       </td>
                                       <td className="p-4">
                                           {ad.status === 'APPROVED' ? <span className="flex items-center gap-1 text-green-600 font-bold text-xs"><CheckCircle size={12}/> Live</span> : <span className="text-orange-500 font-bold text-xs">Pending</span>}
                                       </td>
                                       <td className="p-4 text-right flex justify-end gap-2">
                                           {ad.status !== 'APPROVED' && <button onClick={()=>handleApproveAd(ad.id)} className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-bold">Approve</button>}
-                                          
-                                          {/* NEW: EDIT BUTTON */}
                                           <button onClick={()=>setEditingAd(ad)} className="px-3 py-1 bg-blue-50 text-blue-600 border border-blue-200 rounded hover:bg-blue-100 text-xs font-bold flex items-center gap-1"><Edit size={12}/> Edit</button>
-                                          
                                           <button onClick={()=>handleDeleteAd(ad.id)} className="px-3 py-1 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 text-xs font-bold flex items-center gap-1"><Trash2 size={12}/> Delete</button>
                                       </td>
                                   </tr>
@@ -445,13 +442,24 @@ const RealEstateSearchApp = () => {
                                   <h3 className="font-bold text-lg text-green-700">{ad.price}</h3>
                                   <p className="text-xs text-gray-500 mb-2">{ad.size} | {ad.ad_type}</p>
                                   
-                                  <div className="flex gap-2 mb-2">
-                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="flex-1 bg-green-600 text-white py-1 rounded text-xs font-bold">WhatsApp</button>
-                                      {/* DYNAMIC VIDEO BUTTON */}
-                                      {ad.video_url && (
-                                          <button onClick={() => window.open(ad.video_url, '_blank')} className="flex-1 bg-red-600 text-white py-1 rounded text-xs font-bold flex items-center justify-center gap-1"><Video size={10}/> Watch</button>
-                                      )}
+                                  {ad.description && <p className="text-[10px] text-gray-600 italic mb-2 p-2 bg-gray-50 rounded border">{ad.description}</p>}
+
+                                  {/* AUDIO PLAYER */}
+                                  {ad.audio_url && (
+                                      <div className="mb-2">
+                                          <p className="text-[10px] font-bold text-purple-600 flex items-center gap-1"><Mic size={10}/> Owner's Voice Note:</p>
+                                          <audio controls src={ad.audio_url} className="w-full h-6 mt-1" />
+                                      </div>
+                                  )}
+
+                                  <div className="grid grid-cols-2 gap-2 mb-2">
+                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="bg-green-600 text-white py-1.5 rounded text-xs font-bold">WhatsApp Owner</button>
+                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}?text=Hi, I saw your ad for ${ad.price}. Can I see the Legal/Audit Report?`, '_blank')} className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 shadow-md"><Award size={10}/> Request Report</button>
                                   </div>
+                                  
+                                  {ad.video_url && (
+                                      <button onClick={() => window.open(ad.video_url, '_blank')} className="w-full bg-red-600 text-white py-1 rounded text-xs font-bold flex items-center justify-center gap-1"><Video size={12}/> Watch Video</button>
+                                  )}
                               </div>
                           </div>
                       </Popup>
@@ -459,7 +467,7 @@ const RealEstateSearchApp = () => {
                     {ad.points && <Polygon positions={ad.points} pathOptions={{ color: 'yellow', fillColor: 'yellow', fillOpacity: 0.2 }} />}
                 </React.Fragment>
             ))}
-             {/* ... (Projects and other map elements logic same as before) ... */}
+            {/* ... Other map logic ... */}
             {viewMode === 'VENTURE' && (
                 <FeatureGroup ref={featureGroupRef}>
                     <EditControl position="topright" onCreated={(e)=>{setCurrentShape(e); setShowSaveForm(true);}} draw={{ rectangle: false, polygon: { allowIntersection: false, showArea: false }, circle: false, circlemarker: false, marker: false, polyline: false }} />
@@ -476,7 +484,7 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
-      {/* --- SUB-TOOLBAR & MODALS (Kept exact same) --- */}
+      {/* --- SUB-TOOLBAR --- */}
       {viewMode !== 'ADMIN' && (
         <div className="bg-white border-b px-4 py-2 flex gap-3 items-center text-xs overflow-x-auto shadow-sm">
             {viewMode === 'MARKETPLACE' && (
@@ -499,39 +507,27 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
-      {/* --- NEW: EDIT AD MODAL --- */}
+      {/* --- NEW: EDIT AD MODAL (UPDATED WITH AUDIO) --- */}
       {editingAd && (
           <div className="fixed inset-0 bg-black/60 z-[9999] flex justify-center items-center backdrop-blur-sm p-4">
-              <div className="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl">
+              <div className="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl overflow-y-auto max-h-[90vh]">
                    <div className="flex justify-between items-center mb-4 border-b pb-2">
                       <h3 className="font-bold text-lg flex items-center gap-2"><Edit size={16}/> Edit Ad</h3>
                       <button onClick={()=>setEditingAd(null)} className="hover:bg-gray-100 p-1 rounded"><X size={20}/></button>
                    </div>
                    <div className="space-y-3">
-                       <div>
-                           <label className="text-xs font-bold text-gray-500">Price</label>
-                           <input className="w-full border p-2 rounded text-sm font-bold" value={editingAd.price} onChange={e => setEditingAd({...editingAd, price: e.target.value})} />
-                       </div>
-                       <div>
-                           <label className="text-xs font-bold text-gray-500">Size</label>
-                           <input className="w-full border p-2 rounded text-sm" value={editingAd.size} onChange={e => setEditingAd({...editingAd, size: e.target.value})} />
-                       </div>
-                       <div>
-                           <label className="text-xs font-bold text-gray-500">Contact</label>
-                           <input className="w-full border p-2 rounded text-sm" value={editingAd.contact_info} onChange={e => setEditingAd({...editingAd, contact_info: e.target.value})} />
-                       </div>
+                       <div><label className="text-xs font-bold text-gray-500">Price</label><input className="w-full border p-2 rounded text-sm font-bold" value={editingAd.price} onChange={e => setEditingAd({...editingAd, price: e.target.value})} /></div>
+                       <div><label className="text-xs font-bold text-gray-500">Size</label><input className="w-full border p-2 rounded text-sm" value={editingAd.size} onChange={e => setEditingAd({...editingAd, size: e.target.value})} /></div>
+                       <div><label className="text-xs font-bold text-gray-500">Contact</label><input className="w-full border p-2 rounded text-sm" value={editingAd.contact_info} onChange={e => setEditingAd({...editingAd, contact_info: e.target.value})} /></div>
                        
-                       {/* EDIT IMAGE */}
                        <div className="border border-dashed border-gray-300 p-2 rounded bg-gray-50 text-center">
-                           {uploading ? (
-                               <span className="text-xs font-bold text-blue-500 animate-pulse">Uploading New Image...</span>
-                           ) : (
-                               <label className="text-xs font-bold text-gray-500 flex items-center justify-center gap-1 cursor-pointer">
-                                   <UploadCloud size={14}/> Change Photo
-                                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, true)} />
-                               </label>
-                           )}
+                           <label className="text-xs font-bold text-gray-500 flex items-center justify-center gap-1 cursor-pointer"><UploadCloud size={14}/> Change Photo<input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image', true)} /></label>
                            {editingAd.image_url && <img src={editingAd.image_url} alt="Preview" className="h-10 w-full object-contain mt-2"/>}
+                       </div>
+
+                       <div className="border border-dashed border-purple-300 p-2 rounded bg-purple-50 text-center">
+                           <label className="text-xs font-bold text-purple-600 flex items-center justify-center gap-1 cursor-pointer"><Mic size={14}/> Change Voice Note<input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFileUpload(e, 'audio', true)} /></label>
+                           {editingAd.audio_url && <audio controls src={editingAd.audio_url} className="w-full h-6 mt-2"/>}
                        </div>
 
                        <div className="flex gap-2 pt-2">
@@ -543,7 +539,46 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
-      {/* --- EXISTING MODALS --- */}
+      {/* --- POST AD MODAL (NEW: TEXTAREA + AUDIO) --- */}
+      {newAdLocation && (
+          <div className="fixed bottom-4 left-4 z-[5000] bg-white p-4 rounded-xl shadow-2xl w-80 border-2 border-blue-500 animate-in slide-in-from-bottom-10 max-h-[90vh] overflow-y-auto">
+               <h3 className="font-bold text-blue-600 mb-2">Post New Ad</h3>
+               <div className="space-y-2">
+                   <select className="w-full border p-2 rounded text-sm font-bold" onChange={e => setNewAdData({...newAdData, type: e.target.value})}><option value="SELL">Sell Plot</option><option value="LOOKING">Looking For</option></select>
+                   <div className="flex gap-2">
+                       <input placeholder="Size (e.g. 200)" type="number" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, size: e.target.value})} />
+                       <input placeholder="Price (e.g. 1.5 Cr)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, price: e.target.value})} />
+                   </div>
+                   <input placeholder="WhatsApp (e.g. 9198...)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, contact: e.target.value})} />
+                   
+                   <textarea placeholder="Description: e.g. 'Corner bit, clear title, near Highway...'" className="w-full border p-2 rounded text-sm h-16" onChange={e => setNewAdData({...newAdData, desc: e.target.value})} />
+
+                   {/* MEDIA UPLOADS */}
+                   <div className="grid grid-cols-2 gap-2">
+                       <div className="border border-dashed border-gray-300 p-2 rounded bg-gray-50 text-center">
+                           <label className="text-xs font-bold text-gray-500 flex flex-col items-center justify-center gap-1 cursor-pointer">
+                               <UploadCloud size={14}/> {newAdData.image_url ? "Re-Upload" : "Photo"}
+                               <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image')} />
+                           </label>
+                           {newAdData.image_url && <span className="text-[9px] text-green-600">✅ Ready</span>}
+                       </div>
+                       <div className="border border-dashed border-purple-300 p-2 rounded bg-purple-50 text-center">
+                           <label className="text-xs font-bold text-purple-600 flex flex-col items-center justify-center gap-1 cursor-pointer">
+                               <Mic size={14}/> {newAdData.audio_url ? "Re-Record" : "Voice Note"}
+                               <input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFileUpload(e, 'audio')} />
+                           </label>
+                           {newAdData.audio_url && <span className="text-[9px] text-green-600">✅ Ready</span>}
+                       </div>
+                   </div>
+
+                   <input placeholder="Video Link (YouTube...)" className="w-full border p-2 rounded text-sm bg-gray-50" onChange={e => setNewAdData({...newAdData, video_url: e.target.value})} />
+                   
+                   <button onClick={handlePostAd} disabled={uploading} className={`w-full text-white py-2 rounded font-bold ${uploading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}>Submit Ad</button>
+               </div>
+          </div>
+      )}
+
+      {/* --- EXISTING MODALS (Premium Request, Links, Pin) --- */}
       {showPremiumRequest && (
           <div className="fixed inset-0 bg-black/70 z-[8000] flex justify-center items-center p-4 backdrop-blur-sm animate-in fade-in">
               <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
@@ -598,56 +633,7 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
-      {newAdLocation && (
-          <div className="fixed bottom-4 left-4 z-[5000] bg-white p-4 rounded-xl shadow-2xl w-80 border-2 border-blue-500 animate-in slide-in-from-bottom-10">
-               <h3 className="font-bold text-blue-600 mb-2">Post New Ad</h3>
-               <div className="space-y-2">
-                   <select className="w-full border p-2 rounded text-sm font-bold" onChange={e => setNewAdData({...newAdData, type: e.target.value})}><option value="SELL">Sell Plot</option><option value="LOOKING">Looking For</option></select>
-                   <div className="flex gap-2">
-                       <input placeholder="Size (e.g. 200)" type="number" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, size: e.target.value})} />
-                       <input placeholder="Price (e.g. 1.5 Cr)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, price: e.target.value})} />
-                   </div>
-                   <input placeholder="WhatsApp (e.g. 9198...)" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, contact: e.target.value})} />
-                   
-                   <div className="border border-dashed border-gray-300 p-2 rounded bg-gray-50 text-center">
-                       {uploading ? (
-                           <span className="text-xs font-bold text-blue-500 animate-pulse">Uploading Image...</span>
-                       ) : (
-                           <>
-                            <label className="text-xs font-bold text-gray-500 flex items-center justify-center gap-1 cursor-pointer">
-                                <UploadCloud size={14}/> {newAdData.image_url ? "Change Image" : "Upload Plot Photo"}
-                                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                            </label>
-                            {newAdData.image_url && <span className="text-[10px] text-green-600 block mt-1">✅ Image Ready</span>}
-                           </>
-                       )}
-                   </div>
-
-                   <input placeholder="Video Link (YouTube...)" className="w-full border p-2 rounded text-sm bg-gray-50" onChange={e => setNewAdData({...newAdData, video_url: e.target.value})} />
-                   
-                   <button onClick={handlePostAd} disabled={uploading} className={`w-full text-white py-2 rounded font-bold ${uploading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}>Submit Ad</button>
-               </div>
-          </div>
-      )}
-
-      {showSaveForm && (
-         <div className="fixed inset-0 bg-black/60 z-[6000] flex justify-center items-center">
-             <div className="bg-white p-6 rounded-lg w-80 shadow-2xl animate-in fade-in">
-                 <h3 className="font-bold mb-4 flex items-center gap-2"><Save size={18}/> Save Master Plan</h3>
-                 <form onSubmit={handleSaveProject} className="space-y-3">
-                     <div className="bg-blue-50 p-2 rounded text-xs text-blue-700 mb-2">Shape Captured! Enter details to save.</div>
-                     <input name="label" required placeholder="Project Name" className="w-full border p-2 rounded"/>
-                     <input name="survey_no" placeholder="Survey No." className="w-full border p-2 rounded"/>
-                     <textarea name="note" placeholder="Notes" className="w-full border p-2 rounded h-20"/>
-                     <div className="flex gap-2">
-                         <button type="button" onClick={()=>{setShowSaveForm(false); setCurrentShape(null); featureGroupRef.current.clearLayers();}} className="flex-1 bg-gray-200 py-2 rounded">Discard</button>
-                         <button type="submit" className="flex-1 bg-orange-600 text-white py-2 rounded font-bold">Save</button>
-                     </div>
-                 </form>
-             </div>
-         </div>
-      )}
-
+      {/* --- RATING MODAL --- */}
       {showRatingModal && (
         <div className="fixed inset-0 bg-black/80 z-[7000] flex justify-center items-center p-4 backdrop-blur-sm">
             <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
