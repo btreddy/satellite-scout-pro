@@ -9,6 +9,7 @@
 // 4. HD ZOOM (Lightbox Image Viewer)
 // 5. VIDEO DEMO INTEGRATION (YouTube Support)
 // 6. SUPABASE DATABASE CONNECTION (Persistent Storage)
+// 7. STICKY CONTACT BAR (Follows user on map)
 //
 // ============================================================================
 
@@ -89,7 +90,8 @@ import {
   Wind,
   Maximize2,
   Link as LinkIcon,
-  PlayCircle
+  PlayCircle,
+  Minimize2
 } from 'lucide-react';
 
 // ============================================================================
@@ -282,7 +284,7 @@ const RealEstateSearchApp = () => {
   
   // View Control
   const [showLanding, setShowLanding] = useState(true);
-  const [viewMode, setViewMode] = useState('MARKETPLACE'); // 'MARKETPLACE', 'VENTURE', 'ADMIN'
+  const [viewMode, setViewMode] = useState('MARKETPLACE'); 
   
   // Admin & Security
   const [isAdmin, setIsAdmin] = useState(false);
@@ -297,38 +299,33 @@ const RealEstateSearchApp = () => {
   // Modals Visibility
   const [showLinksModal, setShowLinksModal] = useState(false); 
   const [showPremiumRequest, setShowPremiumRequest] = useState(false); 
-  const [showRatingModal, setShowRatingModal] = useState(false); // The Truth Engine
+  const [showRatingModal, setShowRatingModal] = useState(false);
   
   // Ad Management State
   const [editingAd, setEditingAd] = useState(null);
   const [viewingAd, setViewingAd] = useState(null); 
-  const [fullScreenImage, setFullScreenImage] = useState(null); // HD Image Zoom
+  const [minimizedAd, setMinimizedAd] = useState(null); // Sticky Ad State
+  const [fullScreenImage, setFullScreenImage] = useState(null); 
 
   // Admin Filtering
   const [filterText, setFilterText] = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL'); 
 
   // Map Tools State
-  const [adMode, setAdMode] = useState(null); // 'SELL', 'LOOKING'
+  const [adMode, setAdMode] = useState(null); 
   const [radarMode, setRadarMode] = useState(false); 
   const [newAdLocation, setNewAdLocation] = useState(null);
-  const [marketAds, setMarketAds] = useState([]); // List of all ads
+  const [marketAds, setMarketAds] = useState([]); 
   const [radarResults, setRadarResults] = useState(null);
   
-  // NEW: Agent Phone State (For Dynamic Routing)
+  // Agent & Exclusive Mode State
   const [agentPhone, setAgentPhone] = useState(null);
+  const [exclusiveAgent, setExclusiveAgent] = useState(null); 
 
   // New Ad Form Data
   const [newAdData, setNewAdData] = useState({ 
-      type: 'SELL', 
-      size: '', 
-      price: '', 
-      contact: '', 
-      desc: '', 
-      size_unit: 'Sq Yds', 
-      image_url: '', 
-      video_url: '', 
-      audio_url: '' 
+      type: 'SELL', size: '', price: '', contact: '', desc: '', 
+      size_unit: 'Sq Yds', image_url: '', video_url: '', audio_url: '' 
   });
   const [uploading, setUploading] = useState(false); 
 
@@ -340,16 +337,8 @@ const RealEstateSearchApp = () => {
 
   // Truth Engine / Audit Data State
   const [ratingData, setRatingData] = useState({ 
-      approvalType: 'Unapproved', 
-      reraId: '', 
-      isInFTL: false, 
-      hasRoadAccess: true,
-      roadWidth: '30',
-      hasEc: false,
-      pollution: 'None', 
-      vaastu: 'Good', 
-      price: '', 
-      govtValue: ''
+      approvalType: 'Unapproved', reraId: '', isInFTL: false, hasRoadAccess: true, 
+      roadWidth: '30', hasEc: false, pollution: 'None', vaastu: 'Good', price: '', govtValue: ''
   });
 
   // ---------------------------------------------------------
@@ -357,22 +346,29 @@ const RealEstateSearchApp = () => {
   // ---------------------------------------------------------
   
   useEffect(() => {
-    // 1. Check URL parameters for Deep Links (Sharing)
+    // 1. Parse URL Parameters
     const params = new URLSearchParams(window.location.search);
     
-    // 2. Check for AGENT Referral
+    // 2. Check for AGENT Referral (Who gets the lead?)
     const referralAgent = params.get('agent');
     if (referralAgent) {
-        setAgentPhone(referralAgent); // Store agent number for this session
+        setAgentPhone(referralAgent);
     }
 
-    // 3. Skip Landing Page if specific Ad ID is present
+    // 3. Check for EXCLUSIVE Mode (Who owns the portal?)
+    const exclusive = params.get('exclusive_agent');
+    if (exclusive) {
+        setExclusiveAgent(exclusive);
+        setShowLanding(false); // Skip landing in exclusive mode
+    }
+
+    // 4. Deep Link to specific Ad
     if (params.get('ad_id')) {
         setShowLanding(false);
     }
     
-    // 4. Load Data
-    fetchMarketplaceAds();
+    // 5. Load Data
+    fetchMarketplaceAds(exclusive);
     fetchProjects();
   }, [isAdmin]);
 
@@ -396,13 +392,17 @@ const RealEstateSearchApp = () => {
   // --- SUPABASE DATABASE FUNCTIONS ---
   // ---------------------------------------------------------
 
-  // Fetch Ads from Database
-  const fetchMarketplaceAds = async () => {
+  // Fetch Ads (With Exclusive Mode Logic)
+  const fetchMarketplaceAds = async (exclusiveId = null) => {
     try {
         let query = supabase.from('marketplace_ads').select('*').order('created_at', { ascending: false });
         
-        // If not admin, only show approved ads
-        if (!isAdmin) {
+        // EXCLUSIVE MODE: Only show ads from specific number
+        if (exclusiveId) {
+            query = query.eq('contact_info', exclusiveId); 
+        } 
+        // NORMAL MODE: Show all approved ads
+        else if (!isAdmin) {
             query = query.eq('status', 'APPROVED');
         }
         
@@ -415,26 +415,22 @@ const RealEstateSearchApp = () => {
     }
   };
 
-  // Upload Files (Images/Audio) to Storage Bucket
+  // Upload Files (Images/Audio)
   const handleFileUpload = async (e, type, isEditMode = false) => {
     try {
         setUploading(true);
         const file = e.target.files[0];
         if (!file) return;
 
-        // Generate unique filename
         const fileExt = file.name.split('.').pop();
         const fileName = `${type}_${Math.random()}.${fileExt}`;
         const filePath = `${fileName}`;
 
-        // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage.from('ad-images').upload(filePath, file);
         if (uploadError) throw uploadError;
 
-        // Get Public URL
         const { data } = supabase.storage.from('ad-images').getPublicUrl(filePath);
         
-        // Update State based on mode
         if (isEditMode && editingAd) {
              if(type === 'image') setEditingAd({ ...editingAd, image_url: data.publicUrl });
              if(type === 'audio') setEditingAd({ ...editingAd, audio_url: data.publicUrl });
@@ -449,12 +445,11 @@ const RealEstateSearchApp = () => {
     }
   };
 
-  // Submit New Ad to Database
+  // Submit New Ad
   const handlePostAd = async () => {
     if(!newAdLocation) return alert("Set location first.");
     if(uploading) return alert("Wait for upload.");
 
-    // Calculate Polygon Square (Visual)
     const sizeInSqMeters = parseInt(newAdData.size) * 0.836127; 
     const sideLength = Math.sqrt(sizeInSqMeters); 
     const offset = (sideLength / 2) / 111139; 
@@ -465,7 +460,6 @@ const RealEstateSearchApp = () => {
         [newAdLocation.lat - offset, newAdLocation.lng - offset]
     ];
     
-    // Construct Data Object
     const newAd = {
         lat: newAdLocation.lat, 
         lng: newAdLocation.lng,
@@ -481,15 +475,14 @@ const RealEstateSearchApp = () => {
         points: points
     };
     
-    // Insert into DB
     const { error } = await supabase.from('marketplace_ads').insert([newAd]);
     
     if (!error) { 
         alert("✅ Ad Submitted!"); 
         setAdMode(null); 
         setNewAdLocation(null); 
-        fetchMarketplaceAds(); 
-        // Reset Form
+        // Fetch ads again (respecting exclusive mode if active)
+        fetchMarketplaceAds(exclusiveAgent);
         setNewAdData({ 
             type: 'SELL', size: '', price: '', contact: '', desc: '', 
             size_unit: 'Sq Yds', image_url: '', video_url: '', audio_url: '' 
@@ -499,7 +492,7 @@ const RealEstateSearchApp = () => {
     }
   };
 
-  // Update Existing Ad
+  // Update Ad
   const handleUpdateAd = async () => {
       if(!editingAd) return;
       const { error } = await supabase.from('marketplace_ads').update({
@@ -516,7 +509,7 @@ const RealEstateSearchApp = () => {
       if(!error) {
           alert("✅ Ad Updated Successfully!");
           setEditingAd(null);
-          fetchMarketplaceAds();
+          fetchMarketplaceAds(exclusiveAgent);
       } else {
           alert("Update Failed: " + error.message);
       }
@@ -525,7 +518,7 @@ const RealEstateSearchApp = () => {
   // Admin Actions
   const handleApproveAd = async (id) => { 
       await supabase.from('marketplace_ads').update({ status: 'APPROVED' }).eq('id', id); 
-      fetchMarketplaceAds(); 
+      fetchMarketplaceAds(exclusiveAgent); 
   };
   
   const handleDeleteAd = async (id) => { 
@@ -540,103 +533,52 @@ const RealEstateSearchApp = () => {
 
   // Share Functionality (Agent Mode)
   const handleShareAd = async (ad) => {
-      // 1. Ask for Agent Number
       const agentInput = prompt("👩‍💼 AGENT MODE:\nEnter your mobile number to route leads to YOU.\n(Leave empty to keep original owner)");
       
       let shareUrl = `https://maps.safelanddeal.com/?ad_id=${ad.id}`;
       
-      // 2. Append Agent Param if provided
       if (agentInput && agentInput.trim() !== "") {
           shareUrl += `&agent=${agentInput.trim()}`;
       }
 
-      // 3. Rich Text Message
-      const shareText = `🔥 *${ad.price} | ${ad.size}* \n📍 *Official Safe Land Verified* \n👇 *Click to view Map & Photos:*`;
+      // If in exclusive mode, append that too
+      if (exclusiveAgent) {
+          shareUrl += `&exclusive_agent=${exclusiveAgent}`;
+      }
+
+      const shareText = `🔥 *${ad.price} | ${ad.size}* \n📍 *Safe Land Verified* \n👇 *View Details & Location:*`;
       
       if (navigator.share) {
-          try { 
-              await navigator.share({ 
-                  title: 'Safe Land Deal', 
-                  text: shareText, 
-                  url: shareUrl 
-              }); 
-          } 
-          catch (error) { 
-              console.log('Error sharing', error); 
-          }
+          try { await navigator.share({ title: 'Safe Land Deal', text: shareText, url: shareUrl }); } 
+          catch (error) { console.log('Error sharing', error); }
       } else {
           window.open(`https://wa.me/?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
       }
   };
 
-  // Planner / Project Functions
-  const fetchProjects = async () => {
-    const { data } = await supabase.from('projects').select('*');
-    if (data) setProjects(data);
-  };
-
+  const fetchProjects = async () => { const { data } = await supabase.from('projects').select('*'); if (data) setProjects(data); };
   const handleSaveProject = async (e) => {
-    e.preventDefault();
-    if (!currentShape) return alert("No shape drawn!");
-    
+    e.preventDefault(); if (!currentShape) return alert("No shape drawn!");
     try {
-        const layer = currentShape.layer;
-        let rawLatLngs = layer.getLatLngs();
-        
-        // Handle Leaflet Data Structure inconsistencies
-        if (Array.isArray(rawLatLngs[0]) && typeof rawLatLngs[0].lat !== 'number') {
-            rawLatLngs = rawLatLngs[0];
-        }
-        
-        const cleanPoints = rawLatLngs.map(p => ({ lat: p.lat, lng: p.lng }));
-        const formData = new FormData(e.target);
-        
-        const newProject = {
-            name: formData.get('label'), 
-            survey_number: formData.get('survey_no'),
-            notes: formData.get('note'), 
-            points: cleanPoints, 
-            color: 'cyan'
-        };
-        
-        const { error } = await supabase.from('projects').insert([newProject]);
-        
-        if (!error) {
-            alert("✅ Project Saved!"); 
-            setShowSaveForm(false); 
-            fetchProjects(); 
-            if(featureGroupRef.current) {
-                featureGroupRef.current.clearLayers();
-            }
-            setCurrentShape(null);
-        }
-    } catch (err) { 
-        alert("Error saving shape."); 
-    }
+        const layer = currentShape.layer; let rawLatLngs = layer.getLatLngs(); if (Array.isArray(rawLatLngs[0]) && typeof rawLatLngs[0].lat !== 'number') rawLatLngs = rawLatLngs[0];
+        const cleanPoints = rawLatLngs.map(p => ({ lat: p.lat, lng: p.lng })); const formData = new FormData(e.target);
+        const newProject = { name: formData.get('label'), survey_number: formData.get('survey_no'), notes: formData.get('note'), points: cleanPoints, color: 'cyan' };
+        const { error } = await supabase.from('projects').insert([newProject]); if (!error) { alert("✅ Project Saved!"); setShowSaveForm(false); fetchProjects(); if(featureGroupRef.current) featureGroupRef.current.clearLayers(); setCurrentShape(null); }
+    } catch (err) { alert("Error saving shape."); }
   };
 
-  // ---------------------------------------------------------
-  // --- THE TRUTH ENGINE (PDF GENERATION) ---
-  // ---------------------------------------------------------
+  // --- TRUTH ENGINE (PDF GENERATOR) - FULLY EXPANDED ---
   const generatePDF = (isSample = false) => {
     const doc = new jsPDF();
     const date = new Date().toLocaleDateString();
     
-    // Use real data or sample data
-    const data = isSample ? {
-        approvalType: 'HMDA', 
-        reraId: 'P02400001234', 
-        isInFTL: false, 
-        hasRoadAccess: true, 
-        roadWidth: '40', 
-        hasEc: true, 
-        pollution: 'None', 
-        vaastu: 'Good', 
-        price: '45000', 
-        govtValue: '12000'
+    // Data Source
+    const data = isSample ? { 
+        approvalType: 'HMDA', reraId: 'P02400001234', isInFTL: false, hasRoadAccess: true, 
+        roadWidth: '40', hasEc: true, pollution: 'None', vaastu: 'Good', price: '45000', govtValue: '12000' 
     } : ratingData;
 
-    // Report Header
+    // Header Styling
     doc.setFillColor(25, 25, 112); 
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255); 
@@ -654,101 +596,99 @@ const RealEstateSearchApp = () => {
 
     let yPos = 60;
 
-    // SECTION 1: REGULATORY FACTS
+    // --- SECTION 1: REGULATORY FACTS ---
     doc.setTextColor(0, 0, 0); 
     doc.setFontSize(14); 
     doc.setFont("helvetica", "bold");
     doc.text("1. Regulatory & Safety Facts", 15, yPos);
     
-    const rows = [
-        ['Check', 'Fact Provided', 'Risk Level', 'Consequence / Warning']
-    ];
+    const rows = [['Check', 'Fact Provided', 'Risk Level', 'Consequence / Warning']];
 
-    // Logic Engine
-    
-    // 1. Approval
+    // Logic 1: Authority
     if (data.approvalType === 'HMDA' || data.approvalType === 'DTCP') {
         rows.push(['Authority', data.approvalType, 'LOW', '✅ Eligible for Bank Loan & Building Permission.']);
     } else {
-        rows.push(['Authority', 'Unapproved/Gram Panchayat', 'HIGH', '❌ No Bank Loan. Demolition Risk. Resale is hard.']);
+        rows.push(['Authority', 'Unapproved/GP', 'HIGH', '❌ No Bank Loan. Demolition Risk. Resale is hard.']);
     }
 
-    // 2. FTL Check
+    // Logic 2: FTL
     if (data.isInFTL) {
         rows.push(['Lake Buffer (FTL)', 'INSIDE FTL', 'CRITICAL', '⛔ GOVT PROPERTY. DO NOT BUY. 100% Loss Risk.']);
     } else {
         rows.push(['Lake Buffer (FTL)', 'Outside', 'LOW', '✅ Safe from Lake Buffer Regulations.']);
     }
 
-    // 3. EC Check
+    // Logic 3: EC
     if (data.hasEc) {
         rows.push(['Encumbrance (EC)', 'Clear (Uploaded)', 'LOW', '✅ Ownership Chain appears verified.']);
     } else {
         rows.push(['Encumbrance (EC)', 'NOT PROVIDED', 'MEDIUM', '⚠️ Ownership dispute possible. Verify 30 years link.']);
     }
 
-    // 4. Road Check
+    // Logic 4: Road Access (FIXED SYNTAX HERE)
     if (parseInt(data.roadWidth) < 30) {
-        rows.push(['Road Access', `${data.roadWidth} ft`, 'HIGH', '❌ Too Narrow. Permit may be denied. Fire truck access?']);
+        rows.push([
+            'Road Access', 
+            `${data.roadWidth} ft`, 
+            'HIGH', 
+            '❌ Too Narrow. Permit may be denied. Fire truck access?'
+        ]);
     } else {
-        rows.push(['Road Access', `${data.roadWidth} ft`, 'LOW', '✅ Good width for permission & value.']);
+        rows.push([
+            'Road Access', 
+            `${data.roadWidth} ft`, 
+            'LOW', 
+            '✅ Good width for permission & value.'
+        ]);
     }
 
     // Draw Table 1
-    autoTable(doc, {
-      startY: yPos + 5,
-      head: [rows[0]],
-      body: rows.slice(1),
-      theme: 'grid',
-      headStyles: { fillColor: [44, 62, 80] },
-      styles: { overflow: 'linebreak', fontSize: 9 }, // Text Wrap Fix
-      columnStyles: { 
-          0: { cellWidth: 30 },
-          1: { cellWidth: 35 },
-          2: { cellWidth: 25, fontStyle: 'bold', textColor: [255, 0, 0] },
-          3: { cellWidth: 'auto' } // Takes remaining space
-      }
+    autoTable(doc, { 
+        startY: yPos + 5, 
+        head: [rows[0]], 
+        body: rows.slice(1), 
+        theme: 'grid', 
+        headStyles: { fillColor: [44, 62, 80] }, 
+        styles: { overflow: 'linebreak', fontSize: 9 }, 
+        columnStyles: { 
+            0: { cellWidth: 30 }, 
+            1: { cellWidth: 35 }, 
+            2: { cellWidth: 25, fontStyle: 'bold', textColor: [255, 0, 0] }, 
+            3: { cellWidth: 'auto' } 
+        } 
     });
 
     yPos = doc.lastAutoTable.finalY + 20;
 
-    // SECTION 2: VAASTU & ENVIRONMENT
+    // --- SECTION 2: ENVIRONMENT ---
     doc.text("2. Vaastu & Environmental Reality", 15, yPos);
     
     const envRows = [['Factor', 'Observation', 'Impact']];
     envRows.push(['Pollution Zone', data.pollution, data.pollution === 'None' ? 'Positive' : 'Negative Health Impact']);
     envRows.push(['Vaastu Compliance', data.vaastu, data.vaastu === 'Good' ? 'High Demand' : 'Lower Resale Demand']);
-
+    
     // Draw Table 2
-    autoTable(doc, {
-        startY: yPos + 5,
-        head: [envRows[0]],
-        body: envRows.slice(1),
-        theme: 'striped',
-        headStyles: { fillColor: [39, 174, 96] }
+    autoTable(doc, { 
+        startY: yPos + 5, 
+        head: [envRows[0]], 
+        body: envRows.slice(1), 
+        theme: 'striped', 
+        headStyles: { fillColor: [39, 174, 96] } 
     });
 
     doc.save("Truth_Report.pdf");
   };
 
-  // Map Animation Helper
   const FlyToSearchResult = () => {
     const map = useMap();
-    useEffect(() => { 
-        if (tempSearchMarker) {
-            map.flyTo(tempSearchMarker, 14, { duration: 1.5 }); 
-        }
-    }, [tempSearchMarker]);
+    useEffect(() => { if (tempSearchMarker) map.flyTo(tempSearchMarker, 14, { duration: 1.5 }); }, [tempSearchMarker]);
     return null;
   };
-
-  // Map Click Handler (Post Ad / Radar)
+  
   const MapClickHandler = () => {
     useMapEvents({
       click: (e) => {
-        if (viewMode === 'MARKETPLACE' && adMode) {
-            setNewAdLocation(e.latlng);
-        }
+        if (viewMode === 'MARKETPLACE' && adMode) setNewAdLocation(e.latlng);
         else if (viewMode === 'MARKETPLACE' && radarMode) {
             const dists = GROWTH_NODES.map(node => {
                 const d = L.latLng(e.latlng).distanceTo([node.lat, node.lng]) / 1000;
@@ -767,7 +707,6 @@ const RealEstateSearchApp = () => {
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans text-gray-800">
       
-      {/* 1. LANDING PAGE OVERLAY */}
       {showLanding && <LandingPage onEnter={() => setShowLanding(false)} />}
 
       {/* --- NEW: FULL SCREEN IMAGE MODAL (LIGHTBOX) --- */}
@@ -930,7 +869,7 @@ const RealEstateSearchApp = () => {
                       </h2>
                       <div className="flex gap-2 flex-wrap justify-center">
                           <button 
-                              onClick={() => fetchMarketplaceAds()} 
+                              onClick={() => fetchMarketplaceAds(exclusiveAgent)} 
                               className="p-2 bg-white border rounded hover:bg-gray-50"
                           >
                               <RefreshCw size={16}/>
@@ -1080,10 +1019,10 @@ const RealEstateSearchApp = () => {
                                   {/* POPUP ACTIONS */}
                                   <div className="flex gap-2 mt-2">
                                       <button 
-                                          onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} 
+                                          onClick={() => window.open(`https://wa.me/${agentPhone ? agentPhone : ad.contact_info}`, '_blank')} 
                                           className="flex-1 bg-green-600 text-white py-1 rounded text-xs font-bold"
                                       >
-                                          WhatsApp
+                                          {agentPhone ? 'WhatsApp Agent' : 'WhatsApp Owner'}
                                       </button>
                                       
                                       <button 
@@ -1245,6 +1184,32 @@ const RealEstateSearchApp = () => {
       </div>
 
       {/* --------------------------------------------------------- */}
+      {/* --- NEW: STICKY CONTACT BAR (MINIMIZED AD) --- */}
+      {/* --------------------------------------------------------- */}
+      {minimizedAd && !viewingAd && (
+          <div className="fixed bottom-20 left-4 right-4 md:bottom-24 md:left-auto md:right-4 md:w-80 bg-slate-900 text-white p-3 rounded-xl shadow-2xl z-[4000] flex items-center justify-between animate-in slide-in-from-bottom-5 border border-slate-700">
+              <div className="flex-1 cursor-pointer" onClick={() => { setViewingAd(minimizedAd); setMinimizedAd(null); }}>
+                  <p className="font-bold text-sm text-yellow-400">Last Viewed:</p>
+                  <p className="font-black">{minimizedAd.price} | {minimizedAd.size}</p>
+              </div>
+              <div className="flex gap-2">
+                  <button 
+                      onClick={() => window.open(`https://wa.me/${agentPhone ? agentPhone : minimizedAd.contact_info}`, '_blank')} 
+                      className="bg-green-600 p-2 rounded-full hover:bg-green-500"
+                  >
+                      <Phone size={18}/>
+                  </button>
+                  <button 
+                      onClick={() => setMinimizedAd(null)} 
+                      className="bg-slate-700 p-2 rounded-full hover:bg-slate-600"
+                  >
+                      <X size={18}/>
+                  </button>
+              </div>
+          </div>
+      )}
+
+      {/* --------------------------------------------------------- */}
       {/* --- MODALS (POST, EDIT, VIEW, AUDIT) --- */}
       {/* --------------------------------------------------------- */}
 
@@ -1369,7 +1334,14 @@ const RealEstateSearchApp = () => {
                           </div>
                       )}
 
-                      <button onClick={()=>setViewingAd(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"><X size={20}/></button>
+                      {/* MINIMIZE BUTTON (NEW) */}
+                      <button 
+                          onClick={() => { setMinimizedAd(viewingAd); setViewingAd(null); }} 
+                          className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"
+                      >
+                          <Minimize2 size={20}/>
+                      </button>
+                      
                       {viewingAd.price === '0' && <div className="absolute bottom-2 left-2 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><ShieldCheck size={12}/> OFFICIAL PLATFORM</div>}
                   </div>
                   
@@ -1411,7 +1383,7 @@ const RealEstateSearchApp = () => {
                           </button>
                           
                           <div className="flex gap-2">
-                              {/* --- NEW: VIDEO BUTTON (RED & VISIBLE) --- */}
+                              {/* --- VIDEO BUTTON (RED & VISIBLE) --- */}
                               {viewingAd.video_url && (
                                   <button 
                                       onClick={() => window.open(viewingAd.video_url, '_blank')} 
