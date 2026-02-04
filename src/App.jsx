@@ -21,7 +21,7 @@ import {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; 
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013425183"; 
+const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "9199999999"; 
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -165,7 +165,7 @@ const RealEstateSearchApp = () => {
              if(type === 'image') setNewAdData({ ...newAdData, image_url: data.publicUrl });
              if(type === 'audio') setNewAdData({ ...newAdData, audio_url: data.publicUrl });
         }
-        alert(`✅ ${type === 'image' ? 'Image' : 'Audio'} Uploaded!`);
+        // Removed the alert here as we will show the green tick instead
     } catch (error) {
         alert("Upload Failed: " + error.message);
     } finally {
@@ -199,6 +199,8 @@ const RealEstateSearchApp = () => {
     if (!error) { 
         alert("✅ Ad Submitted!"); 
         setAdMode(null); setNewAdLocation(null); fetchMarketplaceAds(); 
+        // Reset form data after successful submit
+        setNewAdData({ type: 'SELL', size: '', price: '', contact: '', desc: '', size_unit: 'Sq Yds', image_url: '', video_url: '', audio_url: '' });
     } else { alert(error.message); }
   };
 
@@ -208,6 +210,7 @@ const RealEstateSearchApp = () => {
           price: editingAd.price,
           size: editingAd.size,
           contact_info: editingAd.contact_info,
+          description: editingAd.description, // Added description to update
           image_url: editingAd.image_url,
           video_url: editingAd.video_url,
           audio_url: editingAd.audio_url,
@@ -443,7 +446,7 @@ const RealEstateSearchApp = () => {
               </div>
           </div>
       ) : (
-        /* MAP VIEW */
+        /* MAP VIEW - FIXED ZOOM TO 22 */
         <MapContainer center={[17.2360, 78.4192]} zoom={13} maxZoom={22} style={{ height: "100%", width: "100%" }} zoomControl={false}>
             <LayersControl position="topright">
                 <LayersControl.BaseLayer checked name="Satellite">
@@ -456,7 +459,7 @@ const RealEstateSearchApp = () => {
 
             <FlyToSearchResult />
 
-            {/* AD MODE BANNER (MOBILE FIX) */}
+            {/* AD MODE BANNER */}
             {adMode && !newAdLocation && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[3000] bg-black text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-xs font-bold animate-pulse">
                     <MapPin size={14} className="text-yellow-400"/> Tap map to pin location
@@ -475,11 +478,15 @@ const RealEstateSearchApp = () => {
                               {ad.image_url ? <img src={ad.image_url} className="w-full h-32 object-cover rounded-t-lg"/> : null}
                               <div className="p-3">
                                   <h3 className={`font-bold ${isAmbassador ? 'text-yellow-400' : 'text-green-700'}`}>{isAmbassador ? 'JOIN NOW' : ad.price}</h3>
-                                  <p className="text-xs">{ad.size}</p>
+                                  <p className="text-xs mb-2">{ad.size} | {ad.ad_type}</p>
+                                  
+                                  {/* FIXED: Description in Popup */}
+                                  {ad.description && <p className={`text-[10px] italic mb-2 p-1.5 rounded border ${isAmbassador ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>{ad.description.substring(0, 60)}...</p>}
+
                                   {ad.audio_url && <audio controls src={ad.audio_url} className="w-full h-6 mt-2" style={{filter: isAmbassador?'invert(1)':''}}/>}
                                   <div className="flex gap-2 mt-2">
                                       <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="flex-1 bg-green-600 text-white py-1 rounded text-xs">WhatsApp</button>
-                                      <button onClick={() => handleShareAd(ad)} className="flex-1 bg-blue-600 text-white py-1 rounded text-xs">Share</button>
+                                      <button onClick={() => setViewingAd(ad)} className="flex-1 bg-blue-600 text-white py-1 rounded text-xs">Details</button>
                                   </div>
                               </div>
                           </div>
@@ -489,6 +496,7 @@ const RealEstateSearchApp = () => {
                 </React.Fragment>
             )})}
             
+            {/* VENTURE POLYGONS */}
             {viewMode === 'VENTURE' && (
                 <FeatureGroup ref={featureGroupRef}>
                     <EditControl position="topright" onCreated={(e)=>{setCurrentShape(e); setShowSaveForm(true);}} draw={{ rectangle: false, polygon: { allowIntersection: false, showArea: false }, circle: false, circlemarker: false, marker: false, polyline: false }} />
@@ -532,14 +540,14 @@ const RealEstateSearchApp = () => {
               <Radar size={20}/> Radar
           </button>
           
-          {/* FAB: POST AD BUTTON (FIXED LOGIC) */}
+          {/* FAB: POST AD BUTTON */}
           <div className="relative -top-5">
               <button onClick={() => { 
                   if(!adMode) { 
-                      setViewMode('MARKETPLACE'); // FORCE MAP VIEW
+                      setViewMode('MARKETPLACE'); 
                       setAdMode('SELL'); 
                       setRadarMode(false);
-                      setIsSearchOpen(true); // AUTO OPEN SEARCH
+                      setIsSearchOpen(true); 
                   } else { 
                       setAdMode(null); 
                       setNewAdLocation(null); 
@@ -564,7 +572,7 @@ const RealEstateSearchApp = () => {
           )}
       </div>
 
-      {/* ... [POST AD MODAL - FIXED CLOSE] ... */}
+      {/* --- POST AD MODAL (FIXED: Video, Green Ticks) --- */}
       {newAdLocation && (
           <div className="fixed bottom-20 left-4 right-4 md:bottom-4 md:left-4 md:w-80 md:right-auto z-[5000] bg-white p-4 rounded-xl shadow-2xl border-2 border-blue-500 animate-in slide-in-from-bottom-10 max-h-[80vh] overflow-y-auto">
                <div className="flex justify-between items-center mb-2 border-b pb-2">
@@ -578,18 +586,73 @@ const RealEstateSearchApp = () => {
                        <input placeholder="Price" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, price: e.target.value})} />
                    </div>
                    <input placeholder="WhatsApp" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, contact: e.target.value})} />
-                   <textarea placeholder="Description..." className="w-full border p-2 rounded text-sm h-16" onChange={e => setNewAdData({...newAdData, desc: e.target.value})} />
+                   <textarea placeholder="Description (e.g. 'Corner plot, clear title')" className="w-full border p-2 rounded text-sm h-16" onChange={e => setNewAdData({...newAdData, desc: e.target.value})} />
+                   
+                   {/* FIXED: Video Input & Green Ticks */}
                    <div className="grid grid-cols-2 gap-2">
-                       <div className="border border-dashed border-gray-300 p-2 rounded text-center"><label className="text-xs cursor-pointer"><UploadCloud size={14} className="mx-auto"/> Photo<input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image')} /></label></div>
-                       <div className="border border-dashed border-purple-300 p-2 rounded text-center"><label className="text-xs cursor-pointer"><Mic size={14} className="mx-auto"/> Audio<input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFileUpload(e, 'audio')} /></label></div>
+                       <div className={`border border-dashed p-2 rounded text-center ${newAdData.image_url ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
+                           <label className="text-xs cursor-pointer block">
+                               <UploadCloud size={14} className={`mx-auto ${newAdData.image_url ? 'text-green-600' : 'text-gray-400'}`}/>
+                               <span className={newAdData.image_url ? 'text-green-700 font-bold' : ''}>{newAdData.image_url ? '✅ Ready' : 'Photo'}</span>
+                               <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image')} />
+                           </label>
+                       </div>
+                       <div className={`border border-dashed p-2 rounded text-center ${newAdData.audio_url ? 'border-green-500 bg-green-50' : 'border-purple-300'}`}>
+                           <label className="text-xs cursor-pointer block">
+                               <Mic size={14} className={`mx-auto ${newAdData.audio_url ? 'text-green-600' : 'text-purple-400'}`}/>
+                               <span className={newAdData.audio_url ? 'text-green-700 font-bold' : ''}>{newAdData.audio_url ? '✅ Ready' : 'Audio'}</span>
+                               <input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFileUpload(e, 'audio')} />
+                           </label>
+                       </div>
                    </div>
-                   <button onClick={handlePostAd} disabled={uploading} className="w-full bg-blue-600 text-white py-2 rounded font-bold">Submit Ad</button>
+                   <input placeholder="Video Link (YouTube)" className="w-full border p-2 rounded text-sm bg-gray-50" onChange={e => setNewAdData({...newAdData, video_url: e.target.value})} />
+                   
+                   <button onClick={handlePostAd} disabled={uploading || !newAdData.contact || !newAdData.price} className={`w-full py-2 rounded font-bold ${uploading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>{uploading ? 'Uploading...' : 'Submit Ad'}</button>
                </div>
           </div>
       )}
 
-      {/* ... [WELCOME CARD, LINKS MODAL, PIN MODAL - Same as before] ... */}
-      
+      {/* ... [WELCOME CARD - FIXED Description Display] ... */}
+      {viewingAd && (
+          <div className="fixed inset-0 bg-black/70 z-[9999] flex justify-center items-center p-4 animate-in fade-in">
+              <div className={`rounded-xl w-full max-w-sm overflow-hidden flex flex-col shadow-2xl ${viewingAd.price === '0' ? 'bg-slate-900 text-white border-2 border-yellow-500' : 'bg-white'}`}>
+                  <div className="h-48 relative bg-gray-100">
+                      {viewingAd.image_url ? <img src={viewingAd.image_url} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">NO IMAGE</div>}
+                      <button onClick={()=>setViewingAd(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"><X size={20}/></button>
+                      {viewingAd.price === '0' && <div className="absolute bottom-2 left-2 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><ShieldCheck size={12}/> OFFICIAL PLATFORM</div>}
+                  </div>
+                  <div className="p-5">
+                      <div className="flex justify-between items-start mb-2">
+                          <div>
+                              <h2 className={`text-2xl font-black ${viewingAd.price === '0' ? 'text-yellow-400' : 'text-slate-800'}`}>{viewingAd.price === '0' ? 'JOIN NOW (FREE)' : viewingAd.price}</h2>
+                              <p className={`text-sm font-bold ${viewingAd.price === '0' ? 'text-gray-400' : 'text-slate-500'}`}>{viewingAd.size} | {viewingAd.ad_type}</p>
+                          </div>
+                      </div>
+
+                      {/* FIXED: Description Display */}
+                      {viewingAd.description && <p className={`text-sm mb-4 p-3 rounded-lg border ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-slate-50 text-gray-700 border-slate-200'}`}>{viewingAd.description}</p>}
+
+                      {viewingAd.audio_url && (
+                          <div className={`mb-4 p-2 rounded border ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700' : 'bg-purple-50 border-purple-100'}`}>
+                               <p className={`text-xs font-bold flex items-center gap-1 mb-1 ${viewingAd.price === '0' ? 'text-yellow-500' : 'text-purple-700'}`}><Mic size={12}/> Voice Note</p>
+                               <audio controls src={viewingAd.audio_url} className="w-full h-8" style={{ filter: viewingAd.price === '0' ? 'invert(1)' : 'none' }} />
+                          </div>
+                      )}
+
+                      <div className="space-y-2">
+                          <button onClick={() => window.open(`https://wa.me/${viewingAd.contact_info}`, '_blank')} className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${viewingAd.price === '0' ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-green-600 text-white hover:bg-green-700'}`}><MessageCircle size={18}/> WhatsApp Owner</button>
+                          <div className="flex gap-2">
+                              {viewingAd.video_url && <button onClick={() => window.open(viewingAd.video_url, '_blank')} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 hover:bg-red-700"><Video size={14}/> Watch Video</button>}
+                              <button onClick={() => handleShareAd(viewingAd)} className={`flex-1 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 ${viewingAd.price === '0' ? 'bg-slate-700 text-white' : 'bg-blue-100 text-blue-700'}`}><Share2 size={14}/> Share</button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* ... [KEEP OTHER MODALS: Links, Pin, Rating, Edit] ... */}
+      {/* ... (Existing modal code for these stays exactly here, unchanged) ... */}
       {showLinksModal && (
           <div className="fixed inset-0 bg-black/60 z-[9999] flex justify-center items-center p-4">
               <div className="bg-white p-6 rounded-xl w-full max-w-md">
@@ -609,28 +672,38 @@ const RealEstateSearchApp = () => {
           </div>
       )}
       
-      {viewingAd && (
-          <div className="fixed inset-0 bg-black/70 z-[9999] flex justify-center items-center p-4">
-              <div className={`rounded-xl w-full max-w-sm overflow-hidden flex flex-col ${viewingAd.price === '0' ? 'bg-slate-900 text-white border border-yellow-500' : 'bg-white'}`}>
-                  <div className="h-48 relative bg-gray-100">
-                      {viewingAd.image_url ? <img src={viewingAd.image_url} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-slate-400">NO IMAGE</div>}
-                      <button onClick={()=>setViewingAd(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full"><X size={20}/></button>
-                  </div>
-                  <div className="p-5">
-                      <h2 className={`text-2xl font-black ${viewingAd.price === '0' ? 'text-yellow-400' : 'text-slate-800'}`}>{viewingAd.price === '0' ? 'JOIN NOW' : viewingAd.price}</h2>
-                      <p className="text-sm">{viewingAd.size} | {viewingAd.ad_type}</p>
-                      {viewingAd.audio_url && <audio controls src={viewingAd.audio_url} className="w-full h-8 mt-2" style={{ filter: viewingAd.price === '0' ? 'invert(1)' : 'none' }} />}
-                      <div className="flex gap-2 mt-4">
-                          <button onClick={() => window.open(`https://wa.me/${viewingAd.contact_info}`, '_blank')} className="flex-1 bg-green-600 text-white py-2 rounded font-bold">WhatsApp</button>
-                          <button onClick={() => setViewingAd(null)} className="flex-1 bg-gray-200 text-gray-700 py-2 rounded font-bold">Map</button>
-                      </div>
-                  </div>
+      {showRatingModal && (<div className="fixed inset-0 bg-black/80 z-[7000] flex justify-center items-center p-4"><div className="bg-white rounded-xl w-full max-w-lg p-6"><h2 className="font-bold text-lg mb-4">Audit Tool</h2><button onClick={() => generatePDF(false)} className="w-full bg-indigo-900 text-white py-3 rounded-lg font-bold">Download Report</button><button onClick={() => setShowRatingModal(false)} className="mt-4 w-full bg-gray-200 py-2 rounded">Close</button></div></div>)}
+      
+      {editingAd && (
+          <div className="fixed inset-0 bg-black/60 z-[9999] flex justify-center items-center backdrop-blur-sm p-4">
+              <div className="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl overflow-y-auto max-h-[90vh]">
+                   <div className="flex justify-between items-center mb-4 border-b pb-2">
+                      <h3 className="font-bold text-lg flex items-center gap-2"><Edit size={16}/> Edit Ad</h3>
+                      <button onClick={()=>setEditingAd(null)} className="hover:bg-gray-100 p-1 rounded"><X size={20}/></button>
+                   </div>
+                   <div className="space-y-3">
+                       <div><label className="text-xs font-bold text-gray-500">Price</label><input className="w-full border p-2 rounded text-sm font-bold" value={editingAd.price} onChange={e => setEditingAd({...editingAd, price: e.target.value})} /></div>
+                       <div><label className="text-xs font-bold text-gray-500">Size</label><input className="w-full border p-2 rounded text-sm" value={editingAd.size} onChange={e => setEditingAd({...editingAd, size: e.target.value})} /></div>
+                       <div><label className="text-xs font-bold text-gray-500">Contact</label><input className="w-full border p-2 rounded text-sm" value={editingAd.contact_info} onChange={e => setEditingAd({...editingAd, contact_info: e.target.value})} /></div>
+                       {/* FIXED: Added Description Edit Field */}
+                       <div><label className="text-xs font-bold text-gray-500">Description</label><textarea className="w-full border p-2 rounded text-sm h-16" value={editingAd.description || ''} onChange={e => setEditingAd({...editingAd, description: e.target.value})} /></div>
+
+                       <div className="border border-dashed border-gray-300 p-2 rounded bg-gray-50 text-center">
+                           <label className="text-xs font-bold text-gray-500 flex items-center justify-center gap-1 cursor-pointer"><UploadCloud size={14}/> Change Photo<input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image', true)} /></label>
+                           {editingAd.image_url && <img src={editingAd.image_url} alt="Preview" className="h-10 w-full object-contain mt-2"/>}
+                       </div>
+                       <div className="border border-dashed border-purple-300 p-2 rounded bg-purple-50 text-center">
+                           <label className="text-xs font-bold text-purple-600 flex items-center justify-center gap-1 cursor-pointer"><Mic size={14}/> Change Voice Note<input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFileUpload(e, 'audio', true)} /></label>
+                           {editingAd.audio_url && <audio controls src={editingAd.audio_url} className="w-full h-6 mt-2"/>}
+                       </div>
+                       <div className="flex gap-2 pt-2">
+                           <button onClick={()=>setEditingAd(null)} className="flex-1 bg-gray-200 py-2 rounded font-bold text-xs">Cancel</button>
+                           <button onClick={handleUpdateAd} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold text-xs hover:bg-blue-700">Save Changes</button>
+                       </div>
+                   </div>
               </div>
           </div>
       )}
-      {/* (Rating Modal & Edit Modal assumed included as before) */}
-      {showRatingModal && (<div className="fixed inset-0 bg-black/80 z-[7000] flex justify-center items-center p-4"><div className="bg-white rounded-xl w-full max-w-lg p-6"><h2 className="font-bold text-lg mb-4">Audit Tool</h2><button onClick={() => generatePDF(false)} className="w-full bg-indigo-900 text-white py-3 rounded-lg font-bold">Download Report</button><button onClick={() => setShowRatingModal(false)} className="mt-4 w-full bg-gray-200 py-2 rounded">Close</button></div></div>)}
-      {editingAd && (<div className="fixed inset-0 bg-black/60 z-[9999] flex justify-center items-center p-4"><div className="bg-white p-6 rounded-xl w-full max-w-sm"><h3 className="font-bold mb-4">Edit Ad</h3><button onClick={handleUpdateAd} className="w-full bg-blue-600 text-white py-2 rounded font-bold">Save</button><button onClick={()=>setEditingAd(null)} className="mt-2 w-full bg-gray-200 py-2 rounded">Cancel</button></div></div>)}
 
     </div>
   );
