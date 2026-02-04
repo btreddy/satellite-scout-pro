@@ -61,7 +61,8 @@ import {
   Phone, 
   Users, 
   DollarSign, 
-  Wind
+  Wind,
+  Maximize2
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -202,6 +203,7 @@ const RealEstateSearchApp = () => {
   
   const [editingAd, setEditingAd] = useState(null);
   const [viewingAd, setViewingAd] = useState(null); 
+  const [fullScreenImage, setFullScreenImage] = useState(null); // Full Screen Image State
 
   // Filter
   const [filterText, setFilterText] = useState('');
@@ -530,6 +532,34 @@ const RealEstateSearchApp = () => {
       {/* 1. LANDING PAGE OVERLAY */}
       {showLanding && <LandingPage onEnter={() => setShowLanding(false)} />}
 
+      {/* --- NEW: FULL SCREEN IMAGE MODAL (LIGHTBOX) --- */}
+      {fullScreenImage && (
+          <div className="fixed inset-0 z-[11000] bg-black/95 flex justify-center items-center p-4 animate-in fade-in">
+              <button 
+                  onClick={() => setFullScreenImage(null)} 
+                  className="absolute top-4 right-4 text-white bg-gray-800 p-2 rounded-full hover:bg-gray-700 z-[11001]"
+              >
+                  <X size={24}/>
+              </button>
+              
+              <img 
+                  src={fullScreenImage} 
+                  className="max-w-full max-h-full object-contain cursor-zoom-out" 
+                  onClick={() => setFullScreenImage(null)}
+              />
+              
+              <a 
+                  href={fullScreenImage} 
+                  download 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="absolute bottom-8 bg-white text-black px-6 py-3 rounded-full font-bold flex items-center gap-2 shadow-xl hover:bg-gray-200 z-[11001]"
+              >
+                  <Download size={18}/> Download HD
+              </a>
+          </div>
+      )}
+
       {/* 2. MAIN APP */}
       <div className={`flex flex-col h-full transition-opacity duration-1000 ${showLanding ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
       
@@ -559,7 +589,7 @@ const RealEstateSearchApp = () => {
           <div className="bg-slate-800 p-3 md:hidden z-[1999] border-b border-slate-700 animate-in slide-in-from-top-2">
               <div className="flex gap-2">
                   <input 
-                      placeholder="Search Location..." 
+                      placeholder="Search Location (e.g. Shadnagar)..." 
                       className="w-full p-2 rounded-lg text-sm outline-none bg-slate-700 text-white placeholder-slate-400" 
                       autoFocus 
                       value={searchQuery} 
@@ -715,11 +745,17 @@ const RealEstateSearchApp = () => {
                               <div className="p-3">
                                   <h3 className={`font-bold ${isAmbassador ? 'text-yellow-400' : 'text-green-700'}`}>{isAmbassador ? 'JOIN NOW' : ad.price}</h3>
                                   <p className="text-xs mb-2">{ad.size} | {ad.ad_type}</p>
+                                  
+                                  {/* Truncated Text in Popup */}
                                   {ad.description && <p className={`text-[10px] italic mb-2 p-1.5 rounded border ${isAmbassador ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>{ad.description.substring(0, 60)}...</p>}
+                                  
                                   {ad.audio_url && <audio controls src={ad.audio_url} className="w-full h-6 mt-2" style={{filter: isAmbassador?'invert(1)':''}}/>}
+                                  
+                                  {/* POPUP ACTION BUTTONS (WITH SHARE) */}
                                   <div className="flex gap-2 mt-2">
-                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="flex-1 bg-green-600 text-white py-1 rounded text-xs">WhatsApp</button>
-                                      <button onClick={() => setViewingAd(ad)} className="flex-1 bg-blue-600 text-white py-1 rounded text-xs">Details</button>
+                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="flex-1 bg-green-600 text-white py-1 rounded text-xs font-bold">WhatsApp</button>
+                                      <button onClick={() => setViewingAd(ad)} className="flex-1 bg-blue-600 text-white py-1 rounded text-xs font-bold">Details</button>
+                                      <button onClick={() => handleShareAd(ad)} className="px-3 bg-slate-700 text-white py-1 rounded text-xs"><Share2 size={14}/></button>
                                   </div>
                               </div>
                           </div>
@@ -845,15 +881,30 @@ const RealEstateSearchApp = () => {
           </div>
       )}
 
-      {/* --- VIEW AD MODAL --- */}
+      {/* --- VIEW AD MODAL (WELCOME CARD) --- */}
       {viewingAd && (
           <div className="fixed inset-0 bg-black/70 z-[9999] flex justify-center items-center p-4 animate-in fade-in">
               <div className={`rounded-xl w-full max-w-sm overflow-hidden flex flex-col shadow-2xl ${viewingAd.price === '0' ? 'bg-slate-900 text-white border-2 border-yellow-500' : 'bg-white'}`}>
-                  <div className="h-48 relative bg-gray-100">
-                      {viewingAd.image_url ? <img src={viewingAd.image_url} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">NO IMAGE</div>}
+                  <div className="h-48 relative bg-gray-100 group">
+                      {viewingAd.image_url ? 
+                          <img 
+                              src={viewingAd.image_url} 
+                              className="w-full h-full object-cover cursor-zoom-in" 
+                              onClick={() => setFullScreenImage(viewingAd.image_url)}
+                          /> 
+                      : <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">NO IMAGE</div>}
+                      
+                      {/* Zoom Hint Overlay */}
+                      {viewingAd.image_url && (
+                          <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100">
+                              <Maximize2 className="text-white"/>
+                          </div>
+                      )}
+
                       <button onClick={()=>setViewingAd(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black"><X size={20}/></button>
                       {viewingAd.price === '0' && <div className="absolute bottom-2 left-2 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><ShieldCheck size={12}/> OFFICIAL PLATFORM</div>}
                   </div>
+                  
                   <div className="p-5">
                       <div className="flex justify-between items-start mb-2">
                           <div>
@@ -862,14 +913,13 @@ const RealEstateSearchApp = () => {
                           </div>
                       </div>
                       
-                      {/* Description Block */}
+                      {/* FIXED: Scrollable Description Box */}
                       {viewingAd.description && (
-                          <p className={`text-sm mb-4 p-3 rounded-lg border ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-slate-50 text-gray-700 border-slate-200'}`}>
+                          <div className={`text-sm mb-4 p-3 rounded-lg border max-h-32 overflow-y-auto custom-scrollbar ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-slate-50 text-gray-700 border-slate-200'}`}>
                               {viewingAd.description}
-                          </p>
+                          </div>
                       )}
-
-                      {/* Audio Player */}
+                      
                       {viewingAd.audio_url && (
                           <div className={`mb-4 p-2 rounded border ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700' : 'bg-purple-50 border-purple-100'}`}>
                               <p className={`text-xs font-bold flex items-center gap-1 mb-1 ${viewingAd.price === '0' ? 'text-yellow-500' : 'text-purple-700'}`}><Mic size={12}/> Voice Note</p>
@@ -881,6 +931,7 @@ const RealEstateSearchApp = () => {
                           <button onClick={() => window.open(`https://wa.me/${viewingAd.contact_info}`, '_blank')} className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${viewingAd.price === '0' ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-green-600 text-white hover:bg-green-700'}`}>
                               <MessageCircle size={18}/> WhatsApp Owner
                           </button>
+                          
                           <div className="flex gap-2">
                               {viewingAd.video_url && (
                                   <button onClick={() => window.open(viewingAd.video_url, '_blank')} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 hover:bg-red-700">
