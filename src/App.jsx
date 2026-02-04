@@ -341,7 +341,38 @@ const RealEstateSearchApp = () => {
   const [ratingData, setRatingData] = useState({ 
       approvalType: 'Unapproved', reraId: '', isInFTL: false, hasRoadAccess: true, 
       roadWidth: '30', hasEc: false, pollution: 'None', vaastu: 'Good', price: '', govtValue: ''
+      
   });
+  // --- NEW: BULK DELETE STATE ---
+  const [selectedAds, setSelectedAds] = useState([]);
+
+  // Toggle Checkbox Logic
+  const toggleAdSelection = (id) => {
+      if (selectedAds.includes(id)) {
+          setSelectedAds(selectedAds.filter(adId => adId !== id)); // Uncheck
+      } else {
+          setSelectedAds([...selectedAds, id]); // Check
+      }
+  };
+
+  // Bulk Delete Function
+  const handleBulkDelete = async () => {
+      if (selectedAds.length === 0) return;
+      if (confirm(`Are you sure you want to delete ${selectedAds.length} ads permanently?`)) {
+          const { error } = await supabase
+              .from('marketplace_ads')
+              .delete()
+              .in('id', selectedAds); // Magic Supabase command
+          
+          if (!error) {
+              setMarketAds(prev => prev.filter(ad => !selectedAds.includes(ad.id)));
+              setSelectedAds([]); // Clear selection
+              alert("✅ Bulk Delete Successful!");
+          } else {
+              alert("Error: " + error.message);
+          }
+      }
+  };
 
   // ---------------------------------------------------------
   // --- INITIALIZATION EFFECTS ---
@@ -804,36 +835,39 @@ const RealEstateSearchApp = () => {
                       <h2 className="text-xl font-black flex items-center gap-2">
                           <List/> Ad Database
                       </h2>
+                      
+                      {/* --- BULK DELETE BUTTON (Only shows when ads selected) --- */}
+                      {selectedAds.length > 0 && (
+                          <button 
+                              onClick={handleBulkDelete}
+                              className="bg-red-600 text-white px-4 py-2 rounded shadow-lg font-bold animate-pulse flex items-center gap-2"
+                          >
+                              <Trash2 size={16}/> Delete ({selectedAds.length}) Selected
+                          </button>
+                      )}
+
                       <div className="flex gap-2 flex-wrap justify-center">
-                          <button 
-                              onClick={() => fetchMarketplaceAds(exclusiveAgent)} 
-                              className="p-2 bg-white border rounded hover:bg-gray-50"
-                          >
-                              <RefreshCw size={16}/>
-                          </button>
-                          
-                          <button 
-                              onClick={() => setShowLinksModal(true)} 
-                              className="px-3 py-2 bg-blue-600 text-white rounded text-xs font-bold flex items-center gap-1"
-                          >
-                              <Globe size={14}/> Govt Links
-                          </button>
-                          
-                          <button 
-                              onClick={() => setShowRatingModal(true)} 
-                              className="px-3 py-2 bg-purple-600 text-white rounded text-xs font-bold flex items-center gap-1"
-                          >
-                              <ShieldCheck size={14}/> Audit Tool
-                          </button>
+                          <button onClick={() => fetchMarketplaceAds(exclusiveAgent)} className="p-2 bg-white border rounded hover:bg-gray-50"><RefreshCw size={16}/></button>
+                          <button onClick={() => setShowLinksModal(true)} className="px-3 py-2 bg-blue-600 text-white rounded text-xs font-bold flex items-center gap-1"><Globe size={14}/> Govt Links</button>
+                          <button onClick={() => setShowRatingModal(true)} className="px-3 py-2 bg-purple-600 text-white rounded text-xs font-bold flex items-center gap-1"><ShieldCheck size={14}/> Audit Tool</button>
                       </div>
                   </div>
                   
-                  {/* ADS TABLE */}
                   <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
                       <div className="overflow-x-auto">
                       <table className="w-full text-sm text-left">
                           <thead className="bg-slate-50 text-slate-500 font-bold border-b">
                               <tr>
+                                  <th className="p-4 w-10">
+                                      <input 
+                                          type="checkbox" 
+                                          onChange={(e) => {
+                                              if(e.target.checked) setSelectedAds(marketAds.map(ad => ad.id));
+                                              else setSelectedAds([]);
+                                          }}
+                                          checked={selectedAds.length === marketAds.length && marketAds.length > 0}
+                                      />
+                                  </th>
                                   <th className="p-4">Type</th>
                                   <th className="p-4">Price</th>
                                   <th className="p-4">Contact</th>
@@ -843,7 +877,14 @@ const RealEstateSearchApp = () => {
                           </thead>
                           <tbody>
                               {marketAds.map(ad => (
-                                  <tr key={ad.id} className="border-b hover:bg-gray-50">
+                                  <tr key={ad.id} className={`border-b hover:bg-gray-50 ${selectedAds.includes(ad.id) ? 'bg-red-50' : ''}`}>
+                                      <td className="p-4 text-center">
+                                          <input 
+                                              type="checkbox" 
+                                              checked={selectedAds.includes(ad.id)} 
+                                              onChange={() => toggleAdSelection(ad.id)}
+                                          />
+                                      </td>
                                       <td className="p-4">
                                           <span className={`px-2 py-1 rounded text-xs font-bold ${ad.ad_type==='SELL'?'bg-green-100 text-green-800':'bg-blue-100'}`}>
                                               {ad.ad_type}
@@ -856,16 +897,10 @@ const RealEstateSearchApp = () => {
                                       </td>
                                       <td className="p-4 text-right flex justify-end gap-1">
                                           {ad.status !== 'APPROVED' && (
-                                              <button onClick={()=>handleApproveAd(ad.id)} className="p-1 bg-green-100 text-green-700 rounded">
-                                                  <CheckCircle size={14}/>
-                                              </button>
+                                              <button onClick={()=>handleApproveAd(ad.id)} className="p-1 bg-green-100 text-green-700 rounded"><CheckCircle size={14}/></button>
                                           )}
-                                          <button onClick={()=>setEditingAd(ad)} className="p-1 bg-blue-100 text-blue-700 rounded">
-                                              <Edit size={14}/>
-                                          </button>
-                                          <button onClick={()=>handleDeleteAd(ad.id)} className="p-1 bg-red-100 text-red-700 rounded">
-                                              <Trash2 size={14}/>
-                                          </button>
+                                          <button onClick={()=>setEditingAd(ad)} className="p-1 bg-blue-100 text-blue-700 rounded"><Edit size={14}/></button>
+                                          <button onClick={()=>handleDeleteAd(ad.id)} className="p-1 bg-red-100 text-red-700 rounded"><Trash2 size={14}/></button>
                                       </td>
                                   </tr>
                               ))}
