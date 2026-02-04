@@ -1,4 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { 
+  useState, 
+  useEffect, 
+  useRef 
+} from 'react';
+
 import { 
   MapContainer, 
   TileLayer, 
@@ -10,6 +15,7 @@ import {
   FeatureGroup, 
   LayersControl 
 } from 'react-leaflet';
+
 import { EditControl } from "react-leaflet-draw"; 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -18,7 +24,9 @@ import { createClient } from '@supabase/supabase-js';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; 
 
-// --- ICONS ---
+// ---------------------------------------------------------
+// --- ICONS IMPORT ---
+// ---------------------------------------------------------
 import { 
   X, 
   Crosshair, 
@@ -65,25 +73,62 @@ import {
   Maximize2
 } from 'lucide-react';
 
-// --- CONFIGURATION ---
+// ---------------------------------------------------------
+// --- CONFIGURATION & ENV VARIABLES ---
+// ---------------------------------------------------------
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; 
 const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
 
+// Initialize Database Client
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// --- OFFICIAL LINKS ---
+// ---------------------------------------------------------
+// --- DATA CONSTANTS ---
+// ---------------------------------------------------------
+
+// Official Government Portal Links
 const GOVT_LINKS = [
-    { name: "Bhubharathi (Land Status)", url: "https://bhubharati.telangana.gov.in/knowLandStatus" },
-    { name: "CCLA (Integrated Registry)", url: "https://ccla.telangana.gov.in/integratedLandRegistry.do" },
-    { name: "IGRS (EC Search)", url: "https://registration.telangana.gov.in/" },
-    { name: "HMDA Master Plan 2031", url: "https://www.hmda.gov.in/master-planning-2031" },
-    { name: "RERA Telangana", url: "https://rera.telangana.gov.in/" },
-    { name: "Bhuvan (ISRO Maps)", url: "https://bhuvan.nrsc.gov.in/" }
+    { 
+      name: "Bhubharathi (Land Status)", 
+      url: "https://bhubharati.telangana.gov.in/knowLandStatus" 
+    },
+    { 
+      name: "CCLA (Integrated Registry)", 
+      url: "https://ccla.telangana.gov.in/integratedLandRegistry.do" 
+    },
+    { 
+      name: "IGRS (EC Search)", 
+      url: "https://registration.telangana.gov.in/" 
+    },
+    { 
+      name: "HMDA Master Plan 2031", 
+      url: "https://www.hmda.gov.in/master-planning-2031" 
+    },
+    { 
+      name: "RERA Telangana", 
+      url: "https://rera.telangana.gov.in/" 
+    },
+    { 
+      name: "Bhuvan (ISRO Maps)", 
+      url: "https://bhuvan.nrsc.gov.in/" 
+    }
 ];
 
-// --- ICONS CONFIG ---
+// Growth Nodes for Radar Scan
+const GROWTH_NODES = [
+  { name: "Pharma Cluster", lat: 16.9800, lng: 78.6000 },
+  { name: "Amazon Data Center", lat: 17.0500, lng: 78.5500 },
+  { name: "Bharat Future City", lat: 16.9500, lng: 78.5800 },
+  { name: "TCS Adibatla", lat: 17.2100, lng: 78.5300 } 
+];
+
+// ---------------------------------------------------------
+// --- LEAFLET ICON CONFIGURATION ---
+// ---------------------------------------------------------
+
+// Standard Blue Pin
 const DefaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
@@ -92,6 +137,7 @@ const DefaultIcon = L.icon({
   popupAnchor: [1, -34],
 });
 
+// Gold Ambassador Pin
 const GoldIcon = L.icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -102,35 +148,41 @@ const GoldIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-const GROWTH_NODES = [
-  { name: "Pharma Cluster", lat: 16.9800, lng: 78.6000 },
-  { name: "Amazon Data Center", lat: 17.0500, lng: 78.5500 },
-  { name: "Bharat Future City", lat: 16.9500, lng: 78.5800 },
-  { name: "TCS Adibatla", lat: 17.2100, lng: 78.5300 } 
-];
-
-// --- COMPONENT: LANDING PAGE ---
+// ---------------------------------------------------------
+// --- COMPONENT: LANDING PAGE (The "Trust Portal") ---
+// ---------------------------------------------------------
 const LandingPage = ({ onEnter }) => {
     return (
-        <div className="fixed inset-0 z-[9999] bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-700 overflow-y-auto">
+        <div 
+            className="fixed inset-0 z-[9999] bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-700 overflow-y-auto"
+        >
             <div className="max-w-4xl w-full mt-10 md:mt-0">
                 
-                {/* HERO BRANDING */}
+                {/* --- HERO SECTION --- */}
                 <div className="mb-6">
                     <div className="inline-block p-3 rounded-full bg-slate-800 border border-slate-700 shadow-2xl mb-4">
-                        <Crosshair size={48} className="text-yellow-500 animate-spin-slow"/>
+                        <Crosshair 
+                            size={48} 
+                            className="text-yellow-500 animate-spin-slow"
+                        />
                     </div>
-                    <h1 className="text-4xl md:text-6xl font-black tracking-tighter mb-2 bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">SAFE LAND</h1>
-                    <p className="text-yellow-500 font-bold tracking-widest uppercase text-xs md:text-sm">Intelligence Console</p>
+                    <h1 
+                        className="text-4xl md:text-6xl font-black tracking-tighter mb-2 bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent"
+                    >
+                        SAFE LAND
+                    </h1>
+                    <p className="text-yellow-500 font-bold tracking-widest uppercase text-xs md:text-sm">
+                        Intelligence Console
+                    </p>
                 </div>
 
-                {/* HEADLINE */}
+                {/* --- HEADLINE --- */}
                 <h2 className="text-2xl md:text-4xl font-bold mb-4 leading-tight">
                     Stop Buying Blind.<br/>
                     <span className="text-blue-400">Start Buying Truth.</span>
                 </h2>
 
-                {/* VALUE PROPOSITION (TICKER) */}
+                {/* --- VALUE TICKER --- */}
                 <div className="flex flex-wrap justify-center gap-4 mb-8 text-xs md:text-sm font-bold text-slate-400">
                     <span className="flex items-center gap-1 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
                         <Users size={12} className="text-green-400"/> Agents: Verified Leads
@@ -143,23 +195,40 @@ const LandingPage = ({ onEnter }) => {
                     </span>
                 </div>
 
-                {/* FEATURE GRID */}
+                {/* --- THREE PILLARS OF TRUST --- */}
                 <div className="grid md:grid-cols-3 gap-4 mb-8 text-left max-w-2xl mx-auto">
+                    {/* Pillar 1 */}
                     <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors">
-                        <div className="text-green-400 font-bold mb-1 flex items-center gap-2"><Check size={16}/> Satellite Verified</div>
-                        <p className="text-slate-400 text-sm">See exact locations, boundaries, and FTL buffers.</p>
+                        <div className="text-green-400 font-bold mb-1 flex items-center gap-2">
+                            <Check size={16}/> Satellite Verified
+                        </div>
+                        <p className="text-slate-400 text-sm">
+                            See exact locations, boundaries, and FTL buffers.
+                        </p>
                     </div>
+                    
+                    {/* Pillar 2 */}
                     <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors">
-                        <div className="text-purple-400 font-bold mb-1 flex items-center gap-2"><Mic size={16}/> Owner's Voice</div>
-                        <p className="text-slate-400 text-sm">Listen to the owner directly. No distortions.</p>
+                        <div className="text-purple-400 font-bold mb-1 flex items-center gap-2">
+                            <Mic size={16}/> Owner's Voice
+                        </div>
+                        <p className="text-slate-400 text-sm">
+                            Listen to the owner directly. No distortions.
+                        </p>
                     </div>
+                    
+                    {/* Pillar 3 */}
                     <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors">
-                        <div className="text-yellow-400 font-bold mb-1 flex items-center gap-2"><ShieldCheck size={16}/> Govt Data</div>
-                        <p className="text-slate-400 text-sm">Linked with HMDA, RERA, and <b>Bhubharathi</b>.</p>
+                        <div className="text-yellow-400 font-bold mb-1 flex items-center gap-2">
+                            <ShieldCheck size={16}/> Govt Data
+                        </div>
+                        <p className="text-slate-400 text-sm">
+                            Linked with HMDA, RERA, and <b>Bhubharathi</b>.
+                        </p>
                     </div>
                 </div>
 
-                {/* ACTION BUTTONS */}
+                {/* --- ACTION BUTTONS --- */}
                 <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
                     <button 
                         onClick={onEnter} 
@@ -176,60 +245,77 @@ const LandingPage = ({ onEnter }) => {
                     </button>
                 </div>
                 
-                <p className="mt-8 text-slate-600 text-xs">Hyderabad • Telangana • India</p>
+                <p className="mt-8 text-slate-600 text-xs">
+                    Hyderabad • Telangana • India
+                </p>
             </div>
         </div>
     );
 };
 
-// --- MAIN APP COMPONENT ---
+// ---------------------------------------------------------
+// --- MAIN APP LOGIC ---
+// ---------------------------------------------------------
 const RealEstateSearchApp = () => {
-  // --- STATE MANAGEMENT ---
+  
+  // --- STATE VARIABLES ---
+  
+  // View Control
   const [showLanding, setShowLanding] = useState(true);
-  const [viewMode, setViewMode] = useState('MARKETPLACE'); 
+  const [viewMode, setViewMode] = useState('MARKETPLACE'); // 'MARKETPLACE', 'VENTURE', 'ADMIN'
+  
+  // Admin & Security
   const [isAdmin, setIsAdmin] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [showPinModal, setShowPinModal] = useState(false);
   
-  // Search
+  // Search & Navigation
   const [searchQuery, setSearchQuery] = useState('');
   const [tempSearchMarker, setTempSearchMarker] = useState(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false); 
 
-  // Modals
+  // Modals Visibility
   const [showLinksModal, setShowLinksModal] = useState(false); 
   const [showPremiumRequest, setShowPremiumRequest] = useState(false); 
-  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false); // The Truth Engine
   
+  // Ad Management State
   const [editingAd, setEditingAd] = useState(null);
   const [viewingAd, setViewingAd] = useState(null); 
-  const [fullScreenImage, setFullScreenImage] = useState(null); // Full Screen Image State
+  const [fullScreenImage, setFullScreenImage] = useState(null); // HD Image Zoom
 
-  // Filter
+  // Admin Filtering
   const [filterText, setFilterText] = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL'); 
 
-  // Market & Map Tools
-  const [adMode, setAdMode] = useState(null); 
+  // Map Tools State
+  const [adMode, setAdMode] = useState(null); // 'SELL', 'LOOKING'
   const [radarMode, setRadarMode] = useState(false); 
   const [newAdLocation, setNewAdLocation] = useState(null);
-  const [marketAds, setMarketAds] = useState([]);
+  const [marketAds, setMarketAds] = useState([]); // List of all ads
   const [radarResults, setRadarResults] = useState(null);
   
   // New Ad Form Data
   const [newAdData, setNewAdData] = useState({ 
-      type: 'SELL', size: '', price: '', contact: '', desc: '', 
-      size_unit: 'Sq Yds', image_url: '', video_url: '', audio_url: '' 
+      type: 'SELL', 
+      size: '', 
+      price: '', 
+      contact: '', 
+      desc: '', 
+      size_unit: 'Sq Yds', 
+      image_url: '', 
+      video_url: '', 
+      audio_url: '' 
   });
   const [uploading, setUploading] = useState(false); 
 
-  // Projects / Planner
+  // Projects / Planner Mode State
   const [projects, setProjects] = useState([]);
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [currentShape, setCurrentShape] = useState(null); 
   const featureGroupRef = useRef(); 
 
-  // Audit / Rating Data
+  // Truth Engine / Audit Data State
   const [ratingData, setRatingData] = useState({ 
       approvalType: 'Unapproved', 
       reraId: '', 
@@ -243,22 +329,28 @@ const RealEstateSearchApp = () => {
       govtValue: ''
   });
 
-  // --- INITIALIZATION ---
+  // ---------------------------------------------------------
+  // --- INITIALIZATION EFFECTS ---
+  // ---------------------------------------------------------
+  
   useEffect(() => {
-    // Smart Routing: Skip Landing if deep link used
+    // Check URL parameters for Deep Links (Sharing)
     const params = new URLSearchParams(window.location.search);
     if (params.get('ad_id')) {
-        setShowLanding(false);
+        setShowLanding(false); // Skip landing page if user clicked a share link
     }
+    
+    // Load Data
     fetchMarketplaceAds();
     fetchProjects();
   }, [isAdmin]);
 
-  // Deep Link Listener
+  // Handle Deep Linking Navigation (Fly to ad)
   useEffect(() => {
       if (marketAds.length > 0) {
           const params = new URLSearchParams(window.location.search);
           const sharedAdId = params.get('ad_id');
+          
           if (sharedAdId) {
               const foundAd = marketAds.find(ad => ad.id.toString() === sharedAdId);
               if (foundAd) {
@@ -269,31 +361,49 @@ const RealEstateSearchApp = () => {
       }
   }, [marketAds]);
 
-  // --- DATABASE FUNCTIONS ---
+  // ---------------------------------------------------------
+  // --- SUPABASE DATABASE FUNCTIONS ---
+  // ---------------------------------------------------------
+
+  // Fetch Ads from Database
   const fetchMarketplaceAds = async () => {
     try {
         let query = supabase.from('marketplace_ads').select('*').order('created_at', { ascending: false });
-        if (!isAdmin) query = query.eq('status', 'APPROVED');
+        
+        // If not admin, only show approved ads
+        if (!isAdmin) {
+            query = query.eq('status', 'APPROVED');
+        }
+        
         const { data, error } = await query;
-        if (!error) setMarketAds(data || []);
-    } catch(e) { console.error(e); }
+        if (!error) {
+            setMarketAds(data || []);
+        }
+    } catch(e) { 
+        console.error(e); 
+    }
   };
 
+  // Upload Files (Images/Audio) to Storage Bucket
   const handleFileUpload = async (e, type, isEditMode = false) => {
     try {
         setUploading(true);
         const file = e.target.files[0];
         if (!file) return;
 
+        // Generate unique filename
         const fileExt = file.name.split('.').pop();
         const fileName = `${type}_${Math.random()}.${fileExt}`;
         const filePath = `${fileName}`;
 
+        // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage.from('ad-images').upload(filePath, file);
         if (uploadError) throw uploadError;
 
+        // Get Public URL
         const { data } = supabase.storage.from('ad-images').getPublicUrl(filePath);
         
+        // Update State based on mode
         if (isEditMode && editingAd) {
              if(type === 'image') setEditingAd({ ...editingAd, image_url: data.publicUrl });
              if(type === 'audio') setEditingAd({ ...editingAd, audio_url: data.publicUrl });
@@ -301,7 +411,6 @@ const RealEstateSearchApp = () => {
              if(type === 'image') setNewAdData({ ...newAdData, image_url: data.publicUrl });
              if(type === 'audio') setNewAdData({ ...newAdData, audio_url: data.publicUrl });
         }
-        // Success indicator logic is handled in the UI by checking image_url/audio_url presence
     } catch (error) {
         alert("Upload Failed: " + error.message);
     } finally {
@@ -309,10 +418,12 @@ const RealEstateSearchApp = () => {
     }
   };
 
+  // Submit New Ad to Database
   const handlePostAd = async () => {
     if(!newAdLocation) return alert("Set location first.");
     if(uploading) return alert("Wait for upload.");
 
+    // Calculate Polygon Square (Visual)
     const sizeInSqMeters = parseInt(newAdData.size) * 0.836127; 
     const sideLength = Math.sqrt(sizeInSqMeters); 
     const offset = (sideLength / 2) / 111139; 
@@ -323,22 +434,41 @@ const RealEstateSearchApp = () => {
         [newAdLocation.lat - offset, newAdLocation.lng - offset]
     ];
     
+    // Construct Data Object
     const newAd = {
-        lat: newAdLocation.lat, lng: newAdLocation.lng,
-        ad_type: newAdData.type, size: newAdData.size + ' ' + newAdData.size_unit,
-        price: newAdData.price, contact_info: newAdData.contact, description: newAdData.desc,
-        image_url: newAdData.image_url, video_url: newAdData.video_url, audio_url: newAdData.audio_url,
-        status: 'PENDING', points: points
+        lat: newAdLocation.lat, 
+        lng: newAdLocation.lng,
+        ad_type: newAdData.type, 
+        size: newAdData.size + ' ' + newAdData.size_unit,
+        price: newAdData.price, 
+        contact_info: newAdData.contact, 
+        description: newAdData.desc,
+        image_url: newAdData.image_url, 
+        video_url: newAdData.video_url, 
+        audio_url: newAdData.audio_url,
+        status: 'PENDING', 
+        points: points
     };
     
+    // Insert into DB
     const { error } = await supabase.from('marketplace_ads').insert([newAd]);
+    
     if (!error) { 
         alert("✅ Ad Submitted!"); 
-        setAdMode(null); setNewAdLocation(null); fetchMarketplaceAds(); 
-        setNewAdData({ type: 'SELL', size: '', price: '', contact: '', desc: '', size_unit: 'Sq Yds', image_url: '', video_url: '', audio_url: '' });
-    } else { alert(error.message); }
+        setAdMode(null); 
+        setNewAdLocation(null); 
+        fetchMarketplaceAds(); 
+        // Reset Form
+        setNewAdData({ 
+            type: 'SELL', size: '', price: '', contact: '', desc: '', 
+            size_unit: 'Sq Yds', image_url: '', video_url: '', audio_url: '' 
+        });
+    } else { 
+        alert(error.message); 
+    }
   };
 
+  // Update Existing Ad
   const handleUpdateAd = async () => {
       if(!editingAd) return;
       const { error } = await supabase.from('marketplace_ads').update({
@@ -361,6 +491,7 @@ const RealEstateSearchApp = () => {
       }
   };
 
+  // Admin Actions
   const handleApproveAd = async (id) => { 
       await supabase.from('marketplace_ads').update({ status: 'APPROVED' }).eq('id', id); 
       fetchMarketplaceAds(); 
@@ -376,17 +507,29 @@ const RealEstateSearchApp = () => {
       }
   };
 
+  // Share Functionality
   const handleShareAd = async (ad) => {
       const shareUrl = `https://maps.safelanddeal.com/?ad_id=${ad.id}`;
-      const shareText = `🔥 *Safe Land Deal Alert* 🔥\n\n💎 *Price:* ${ad.price}\n📏 *Size:* ${ad.size}\n📍 *Verified Location:*`;
+      // Rich Text for WhatsApp Share
+      const shareText = `🔥 *${ad.price} | ${ad.size}* \n📍 *Official Safe Land Verified* \n👇 *Click to view Map & Photos:*`;
+      
       if (navigator.share) {
-          try { await navigator.share({ title: 'Safe Land Deal', text: shareText, url: shareUrl }); } 
-          catch (error) { console.log('Error sharing', error); }
+          try { 
+              await navigator.share({ 
+                  title: 'Safe Land Deal', 
+                  text: shareText, 
+                  url: shareUrl 
+              }); 
+          } 
+          catch (error) { 
+              console.log('Error sharing', error); 
+          }
       } else {
           window.open(`https://wa.me/?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
       }
   };
 
+  // Planner / Project Functions
   const fetchProjects = async () => {
     const { data } = await supabase.from('projects').select('*');
     if (data) setProjects(data);
@@ -395,80 +538,123 @@ const RealEstateSearchApp = () => {
   const handleSaveProject = async (e) => {
     e.preventDefault();
     if (!currentShape) return alert("No shape drawn!");
+    
     try {
         const layer = currentShape.layer;
         let rawLatLngs = layer.getLatLngs();
-        if (Array.isArray(rawLatLngs[0]) && typeof rawLatLngs[0].lat !== 'number') rawLatLngs = rawLatLngs[0];
+        
+        // Handle Leaflet Data Structure inconsistencies
+        if (Array.isArray(rawLatLngs[0]) && typeof rawLatLngs[0].lat !== 'number') {
+            rawLatLngs = rawLatLngs[0];
+        }
+        
         const cleanPoints = rawLatLngs.map(p => ({ lat: p.lat, lng: p.lng }));
         const formData = new FormData(e.target);
+        
         const newProject = {
-            name: formData.get('label'), survey_number: formData.get('survey_no'),
-            notes: formData.get('note'), points: cleanPoints, color: 'cyan'
+            name: formData.get('label'), 
+            survey_number: formData.get('survey_no'),
+            notes: formData.get('note'), 
+            points: cleanPoints, 
+            color: 'cyan'
         };
+        
         const { error } = await supabase.from('projects').insert([newProject]);
+        
         if (!error) {
-            alert("✅ Project Saved!"); setShowSaveForm(false); fetchProjects(); 
-            if(featureGroupRef.current) featureGroupRef.current.clearLayers();
+            alert("✅ Project Saved!"); 
+            setShowSaveForm(false); 
+            fetchProjects(); 
+            if(featureGroupRef.current) {
+                featureGroupRef.current.clearLayers();
+            }
             setCurrentShape(null);
         }
-    } catch (err) { alert("Error saving shape."); }
+    } catch (err) { 
+        alert("Error saving shape."); 
+    }
   };
 
-  // --- PDF GENERATOR (TRUTH REPORT) ---
+  // ---------------------------------------------------------
+  // --- THE TRUTH ENGINE (PDF GENERATION) ---
+  // ---------------------------------------------------------
   const generatePDF = (isSample = false) => {
     const doc = new jsPDF();
     const date = new Date().toLocaleDateString();
     
+    // Use real data or sample data
     const data = isSample ? {
-        approvalType: 'HMDA', reraId: 'P02400001234', isInFTL: false, hasRoadAccess: true, roadWidth: '40', hasEc: true, pollution: 'None', vaastu: 'Good', price: '45000', govtValue: '12000'
+        approvalType: 'HMDA', 
+        reraId: 'P02400001234', 
+        isInFTL: false, 
+        hasRoadAccess: true, 
+        roadWidth: '40', 
+        hasEc: true, 
+        pollution: 'None', 
+        vaastu: 'Good', 
+        price: '45000', 
+        govtValue: '12000'
     } : ratingData;
 
-    // Header
-    doc.setFillColor(25, 25, 112); doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(24); doc.setFont("helvetica", "bold");
+    // Report Header
+    doc.setFillColor(25, 25, 112); 
+    doc.rect(0, 0, 210, 40, 'F');
+    doc.setTextColor(255, 255, 255); 
+    doc.setFontSize(24); 
+    doc.setFont("helvetica", "bold");
     doc.text("SAFE LAND TRUTH REPORT", 15, 20);
-    doc.setFontSize(10); doc.text(isSample ? "SAMPLE ANALYSIS" : "GENERATED BY SAFE LAND INTELLIGENCE", 15, 30);
+    doc.setFontSize(10); 
+    doc.text(isSample ? "SAMPLE ANALYSIS" : "GENERATED BY SAFE LAND INTELLIGENCE", 15, 30);
     doc.text(`Date: ${date}`, 160, 30);
 
     // Disclaimer
-    doc.setTextColor(100, 100, 100); doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100); 
+    doc.setFontSize(8);
     doc.text("NOTE: This report is based on provided data. It helps in risk assessment but does not guarantee legal clearance.", 15, 48);
 
     let yPos = 60;
 
-    // 1. REGULATORY FACTS
-    doc.setTextColor(0, 0, 0); doc.setFontSize(14); doc.setFont("helvetica", "bold");
+    // SECTION 1: REGULATORY FACTS
+    doc.setTextColor(0, 0, 0); 
+    doc.setFontSize(14); 
+    doc.setFont("helvetica", "bold");
     doc.text("1. Regulatory & Safety Facts", 15, yPos);
     
     const rows = [
         ['Check', 'Fact Provided', 'Risk Level', 'Consequence / Warning']
     ];
 
-    // Logic
+    // Logic Engine
+    
+    // 1. Approval
     if (data.approvalType === 'HMDA' || data.approvalType === 'DTCP') {
         rows.push(['Authority', data.approvalType, 'LOW', '✅ Eligible for Bank Loan & Building Permission.']);
     } else {
         rows.push(['Authority', 'Unapproved/Gram Panchayat', 'HIGH', '❌ No Bank Loan. Demolition Risk. Resale is hard.']);
     }
 
+    // 2. FTL Check
     if (data.isInFTL) {
         rows.push(['Lake Buffer (FTL)', 'INSIDE FTL', 'CRITICAL', '⛔ GOVT PROPERTY. DO NOT BUY. 100% Loss Risk.']);
     } else {
         rows.push(['Lake Buffer (FTL)', 'Outside', 'LOW', '✅ Safe from Lake Buffer Regulations.']);
     }
 
+    // 3. EC Check
     if (data.hasEc) {
         rows.push(['Encumbrance (EC)', 'Clear (Uploaded)', 'LOW', '✅ Ownership Chain appears verified.']);
     } else {
         rows.push(['Encumbrance (EC)', 'NOT PROVIDED', 'MEDIUM', '⚠️ Ownership dispute possible. Verify 30 years link.']);
     }
 
+    // 4. Road Check
     if (parseInt(data.roadWidth) < 30) {
         rows.push(['Road Access', `${data.roadWidth} ft`, 'HIGH', '❌ Too Narrow. Permit may be denied. Fire truck access?']);
     } else {
         rows.push(['Road Access', `${data.roadWidth} ft`, 'LOW', '✅ Good width for permission & value.']);
     }
 
+    // Draw Table 1
     autoTable(doc, {
       startY: yPos + 5,
       head: [rows[0]],
@@ -486,13 +672,14 @@ const RealEstateSearchApp = () => {
 
     yPos = doc.lastAutoTable.finalY + 20;
 
-    // 2. VAASTU & ENVIRONMENT
+    // SECTION 2: VAASTU & ENVIRONMENT
     doc.text("2. Vaastu & Environmental Reality", 15, yPos);
     
     const envRows = [['Factor', 'Observation', 'Impact']];
     envRows.push(['Pollution Zone', data.pollution, data.pollution === 'None' ? 'Positive' : 'Negative Health Impact']);
     envRows.push(['Vaastu Compliance', data.vaastu, data.vaastu === 'Good' ? 'High Demand' : 'Lower Resale Demand']);
 
+    // Draw Table 2
     autoTable(doc, {
         startY: yPos + 5,
         head: [envRows[0]],
@@ -504,15 +691,24 @@ const RealEstateSearchApp = () => {
     doc.save("Truth_Report.pdf");
   };
 
+  // Map Animation Helper
   const FlyToSearchResult = () => {
     const map = useMap();
-    useEffect(() => { if (tempSearchMarker) map.flyTo(tempSearchMarker, 14, { duration: 1.5 }); }, [tempSearchMarker]);
+    useEffect(() => { 
+        if (tempSearchMarker) {
+            map.flyTo(tempSearchMarker, 14, { duration: 1.5 }); 
+        }
+    }, [tempSearchMarker]);
     return null;
   };
+
+  // Map Click Handler (Post Ad / Radar)
   const MapClickHandler = () => {
     useMapEvents({
       click: (e) => {
-        if (viewMode === 'MARKETPLACE' && adMode) setNewAdLocation(e.latlng);
+        if (viewMode === 'MARKETPLACE' && adMode) {
+            setNewAdLocation(e.latlng);
+        }
         else if (viewMode === 'MARKETPLACE' && radarMode) {
             const dists = GROWTH_NODES.map(node => {
                 const d = L.latLng(e.latlng).distanceTo([node.lat, node.lng]) / 1000;
@@ -525,7 +721,9 @@ const RealEstateSearchApp = () => {
     return null;
   };
 
+  // ---------------------------------------------------------
   // --- RENDER UI ---
+  // ---------------------------------------------------------
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans text-gray-800">
       
@@ -553,15 +751,17 @@ const RealEstateSearchApp = () => {
                   download 
                   target="_blank" 
                   rel="noreferrer"
-                  className="absolute bottom-8 bg-white text-black px-6 py-3 rounded-full font-bold flex items-center gap-2 shadow-xl hover:bg-gray-200 z-[11001]"
+                  className="absolute bottom-8 bg-white text-black px-6 py-3 rounded-full font-bold flex items-center gap-2 shadow-xl hover:bg-gray-200 z-[11002]"
               >
                   <Download size={18}/> Download HD
               </a>
           </div>
       )}
 
-      {/* 2. MAIN APP */}
-      <div className={`flex flex-col h-full transition-opacity duration-1000 ${showLanding ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      {/* 2. MAIN APP CONTENT */}
+      <div 
+          className={`flex flex-col h-full transition-opacity duration-1000 ${showLanding ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+      >
       
       {/* --- MOBILE TOP HEADER --- */}
       <header className="bg-slate-900 px-4 py-3 flex justify-between items-center z-[2000] shadow-md text-white md:hidden">
@@ -584,7 +784,7 @@ const RealEstateSearchApp = () => {
           </div>
       </header>
 
-      {/* --- MOBILE SEARCH BAR --- */}
+      {/* --- MOBILE SEARCH BAR EXPANSION --- */}
       {isSearchOpen && (
           <div className="bg-slate-800 p-3 md:hidden z-[1999] border-b border-slate-700 animate-in slide-in-from-top-2">
               <div className="flex gap-2">
@@ -598,11 +798,16 @@ const RealEstateSearchApp = () => {
                           if(e.key === 'Enter'){ 
                               const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}`); 
                               const data = await res.json(); 
-                              if(data && data[0]) { setTempSearchMarker([data[0].lat, data[0].lon]); setIsSearchOpen(false); } 
+                              if(data && data[0]) { 
+                                  setTempSearchMarker([data[0].lat, data[0].lon]); 
+                                  setIsSearchOpen(false); 
+                              } 
                           } 
                       }}
                   />
-                  <button onClick={() => setIsSearchOpen(false)} className="text-slate-400"><X size={20}/></button>
+                  <button onClick={() => setIsSearchOpen(false)} className="text-slate-400">
+                      <X size={20}/>
+                  </button>
               </div>
           </div>
       )}
@@ -648,7 +853,13 @@ const RealEstateSearchApp = () => {
                     className="bg-transparent outline-none text-sm w-32 text-white placeholder-gray-500" 
                     value={searchQuery} 
                     onChange={(e) => setSearchQuery(e.target.value)} 
-                    onKeyDown={async (e) => { if(e.key === 'Enter'){ const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}`); const data = await res.json(); if(data && data[0]) setTempSearchMarker([data[0].lat, data[0].lon]); } }} 
+                    onKeyDown={async (e) => { 
+                        if(e.key === 'Enter'){ 
+                            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}`); 
+                            const data = await res.json(); 
+                            if(data && data[0]) setTempSearchMarker([data[0].lat, data[0].lon]); 
+                        } 
+                    }} 
                 />
             </div>
             <button 
@@ -666,19 +877,42 @@ const RealEstateSearchApp = () => {
         </div>
       </header>
 
-      {/* --- CONTENT AREA --- */}
+      {/* --- MAIN CONTENT AREA --- */}
       <div className="flex-1 relative z-0 pb-16 md:pb-0"> 
+        
+        {/* --- VIEW: ADMIN DASHBOARD --- */}
         {viewMode === 'ADMIN' ? (
           <div className="h-full overflow-auto p-4 bg-gray-100">
               <div className="max-w-6xl mx-auto">
                   <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-2">
-                      <h2 className="text-xl font-black flex items-center gap-2"><List/> Ad Database</h2>
+                      <h2 className="text-xl font-black flex items-center gap-2">
+                          <List/> Ad Database
+                      </h2>
                       <div className="flex gap-2 flex-wrap justify-center">
-                          <button onClick={() => fetchMarketplaceAds()} className="p-2 bg-white border rounded hover:bg-gray-50"><RefreshCw size={16}/></button>
-                          <button onClick={() => setShowLinksModal(true)} className="px-3 py-2 bg-blue-600 text-white rounded text-xs font-bold flex items-center gap-1"><Globe size={14}/> Govt Links</button>
-                          <button onClick={() => setShowRatingModal(true)} className="px-3 py-2 bg-purple-600 text-white rounded text-xs font-bold flex items-center gap-1"><ShieldCheck size={14}/> Audit Tool</button>
+                          <button 
+                              onClick={() => fetchMarketplaceAds()} 
+                              className="p-2 bg-white border rounded hover:bg-gray-50"
+                          >
+                              <RefreshCw size={16}/>
+                          </button>
+                          
+                          <button 
+                              onClick={() => setShowLinksModal(true)} 
+                              className="px-3 py-2 bg-blue-600 text-white rounded text-xs font-bold flex items-center gap-1"
+                          >
+                              <Globe size={14}/> Govt Links
+                          </button>
+                          
+                          <button 
+                              onClick={() => setShowRatingModal(true)} 
+                              className="px-3 py-2 bg-purple-600 text-white rounded text-xs font-bold flex items-center gap-1"
+                          >
+                              <ShieldCheck size={14}/> Audit Tool
+                          </button>
                       </div>
                   </div>
+                  
+                  {/* ADS TABLE */}
                   <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
                       <div className="overflow-x-auto">
                       <table className="w-full text-sm text-left">
@@ -694,14 +928,28 @@ const RealEstateSearchApp = () => {
                           <tbody>
                               {marketAds.map(ad => (
                                   <tr key={ad.id} className="border-b hover:bg-gray-50">
-                                      <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold ${ad.ad_type==='SELL'?'bg-green-100 text-green-800':'bg-blue-100'}`}>{ad.ad_type}</span></td>
+                                      <td className="p-4">
+                                          <span className={`px-2 py-1 rounded text-xs font-bold ${ad.ad_type==='SELL'?'bg-green-100 text-green-800':'bg-blue-100'}`}>
+                                              {ad.ad_type}
+                                          </span>
+                                      </td>
                                       <td className="p-4 font-bold">{ad.price}</td>
                                       <td className="p-4 text-xs">{ad.contact_info}</td>
-                                      <td className="p-4 text-xs">{ad.status === 'APPROVED' ? '✅ Live' : '🟠 Pending'}</td>
+                                      <td className="p-4 text-xs">
+                                          {ad.status === 'APPROVED' ? '✅ Live' : '🟠 Pending'}
+                                      </td>
                                       <td className="p-4 text-right flex justify-end gap-1">
-                                          {ad.status !== 'APPROVED' && <button onClick={()=>handleApproveAd(ad.id)} className="p-1 bg-green-100 text-green-700 rounded"><CheckCircle size={14}/></button>}
-                                          <button onClick={()=>setEditingAd(ad)} className="p-1 bg-blue-100 text-blue-700 rounded"><Edit size={14}/></button>
-                                          <button onClick={()=>handleDeleteAd(ad.id)} className="p-1 bg-red-100 text-red-700 rounded"><Trash2 size={14}/></button>
+                                          {ad.status !== 'APPROVED' && (
+                                              <button onClick={()=>handleApproveAd(ad.id)} className="p-1 bg-green-100 text-green-700 rounded">
+                                                  <CheckCircle size={14}/>
+                                              </button>
+                                          )}
+                                          <button onClick={()=>setEditingAd(ad)} className="p-1 bg-blue-100 text-blue-700 rounded">
+                                              <Edit size={14}/>
+                                          </button>
+                                          <button onClick={()=>handleDeleteAd(ad.id)} className="p-1 bg-red-100 text-red-700 rounded">
+                                              <Trash2 size={14}/>
+                                          </button>
                                       </td>
                                   </tr>
                               ))}
@@ -712,28 +960,47 @@ const RealEstateSearchApp = () => {
               </div>
           </div>
         ) : (
-        /* MAP VIEW */
-        <MapContainer center={[17.2360, 78.4192]} zoom={13} maxZoom={22} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+        /* --- VIEW: MAP INTERFACE --- */
+        <MapContainer 
+            center={[17.2360, 78.4192]} 
+            zoom={13} 
+            maxZoom={22} 
+            style={{ height: "100%", width: "100%" }} 
+            zoomControl={false}
+        >
             <LayersControl position="topright">
                 <LayersControl.BaseLayer checked name="Satellite">
-                    <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri" maxNativeZoom={18} maxZoom={22} />
+                    <TileLayer 
+                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" 
+                        attribution="Esri" 
+                        maxNativeZoom={18} 
+                        maxZoom={22} 
+                    />
                 </LayersControl.BaseLayer>
                 <LayersControl.BaseLayer name="Street">
-                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="OSM" />
+                    <TileLayer 
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
+                        attribution="OSM" 
+                    />
                 </LayersControl.BaseLayer>
             </LayersControl>
 
             <FlyToSearchResult />
 
-            {/* AD MODE BANNER (MOBILE FIX) */}
+            {/* --- AD MODE BANNER --- */}
             {adMode && !newAdLocation && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[3000] bg-black text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-xs font-bold animate-pulse">
                     <MapPin size={14} className="text-yellow-400"/> Tap map to pin location
-                    <button onClick={()=>setAdMode(null)} className="ml-2 bg-white/20 p-1 rounded-full"><X size={12}/></button>
+                    <button 
+                        onClick={()=>setAdMode(null)} 
+                        className="ml-2 bg-white/20 p-1 rounded-full"
+                    >
+                        <X size={12}/>
+                    </button>
                 </div>
             )}
             
-            {/* MARKERS */}
+            {/* --- MAP MARKERS --- */}
             {viewMode === 'MARKETPLACE' && marketAds.map((ad) => {
                 const isAmbassador = ad.price === '0' || ad.price === '0 ' || ad.price === 'FREE';
                 return (
@@ -741,76 +1008,169 @@ const RealEstateSearchApp = () => {
                     <Marker position={[ad.lat, ad.lng]} icon={isAmbassador ? GoldIcon : DefaultIcon}>
                       <Popup className={isAmbassador ? "ambassador-popup" : "premium-popup"}>
                           <div className={`min-w-[200px] ${isAmbassador ? 'bg-slate-900 text-white -m-4 rounded-xl border-2 border-yellow-500' : ''}`}>
-                              {ad.image_url ? <img src={ad.image_url} className="w-full h-32 object-cover rounded-t-lg"/> : null}
+                              {ad.image_url ? 
+                                  <img 
+                                      src={ad.image_url} 
+                                      className="w-full h-32 object-cover rounded-t-lg"
+                                  /> 
+                              : null}
+                              
                               <div className="p-3">
-                                  <h3 className={`font-bold ${isAmbassador ? 'text-yellow-400' : 'text-green-700'}`}>{isAmbassador ? 'JOIN NOW' : ad.price}</h3>
+                                  <h3 className={`font-bold ${isAmbassador ? 'text-yellow-400' : 'text-green-700'}`}>
+                                      {isAmbassador ? 'JOIN NOW' : ad.price}
+                                  </h3>
                                   <p className="text-xs mb-2">{ad.size} | {ad.ad_type}</p>
                                   
-                                  {/* Truncated Text in Popup */}
-                                  {ad.description && <p className={`text-[10px] italic mb-2 p-1.5 rounded border ${isAmbassador ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>{ad.description.substring(0, 60)}...</p>}
+                                  {/* TRUNCATED DESCRIPTION IN POPUP */}
+                                  {ad.description && (
+                                      <p className={`text-[10px] italic mb-2 p-1.5 rounded border ${isAmbassador ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
+                                          {ad.description.substring(0, 60)}...
+                                      </p>
+                                  )}
                                   
-                                  {ad.audio_url && <audio controls src={ad.audio_url} className="w-full h-6 mt-2" style={{filter: isAmbassador?'invert(1)':''}}/>}
+                                  {ad.audio_url && (
+                                      <audio 
+                                          controls 
+                                          src={ad.audio_url} 
+                                          className="w-full h-6 mt-2" 
+                                          style={{filter: isAmbassador?'invert(1)':''}}
+                                      />
+                                  )}
                                   
-                                  {/* POPUP ACTION BUTTONS (WITH SHARE) */}
+                                  {/* POPUP ACTIONS */}
                                   <div className="flex gap-2 mt-2">
-                                      <button onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} className="flex-1 bg-green-600 text-white py-1 rounded text-xs font-bold">WhatsApp</button>
-                                      <button onClick={() => setViewingAd(ad)} className="flex-1 bg-blue-600 text-white py-1 rounded text-xs font-bold">Details</button>
-                                      <button onClick={() => handleShareAd(ad)} className="px-3 bg-slate-700 text-white py-1 rounded text-xs"><Share2 size={14}/></button>
+                                      <button 
+                                          onClick={() => window.open(`https://wa.me/${ad.contact_info}`, '_blank')} 
+                                          className="flex-1 bg-green-600 text-white py-1 rounded text-xs font-bold"
+                                      >
+                                          WhatsApp
+                                      </button>
+                                      
+                                      <button 
+                                          onClick={() => setViewingAd(ad)} 
+                                          className="flex-1 bg-blue-600 text-white py-1 rounded text-xs font-bold"
+                                      >
+                                          Details
+                                      </button>
+                                      
+                                      <button 
+                                          onClick={() => handleShareAd(ad)} 
+                                          className="px-3 bg-slate-700 text-white py-1 rounded text-xs"
+                                      >
+                                          <Share2 size={14}/>
+                                      </button>
                                   </div>
                               </div>
                           </div>
                       </Popup>
                     </Marker>
-                    {ad.points && <Polygon positions={ad.points} pathOptions={{ color: isAmbassador ? 'gold' : 'yellow', fillColor: isAmbassador ? 'gold' : 'yellow', fillOpacity: 0.2 }} />}
+                    
+                    {/* DRAW POLYGON IF AVAILABLE */}
+                    {ad.points && (
+                        <Polygon 
+                            positions={ad.points} 
+                            pathOptions={{ 
+                                color: isAmbassador ? 'gold' : 'yellow', 
+                                fillColor: isAmbassador ? 'gold' : 'yellow', 
+                                fillOpacity: 0.2 
+                            }} 
+                        />
+                    )}
                 </React.Fragment>
             )})}
             
+            {/* --- PLANNER MODE SHAPES --- */}
             {viewMode === 'VENTURE' && (
                 <FeatureGroup ref={featureGroupRef}>
-                    <EditControl position="topright" onCreated={(e)=>{setCurrentShape(e); setShowSaveForm(true);}} draw={{ rectangle: false, polygon: { allowIntersection: false, showArea: false }, circle: false, circlemarker: false, marker: false, polyline: false }} />
-                    {projects.map(p => (<Polygon key={p.id} positions={p.points} color={p.color || "cyan"}><Popup>{p.name}</Popup></Polygon>))}
+                    <EditControl 
+                        position="topright" 
+                        onCreated={(e)=>{setCurrentShape(e); setShowSaveForm(true);}} 
+                        draw={{ 
+                            rectangle: false, 
+                            polygon: { allowIntersection: false, showArea: false }, 
+                            circle: false, 
+                            circlemarker: false, 
+                            marker: false, 
+                            polyline: false 
+                        }} 
+                    />
+                    {projects.map(p => (
+                        <Polygon 
+                            key={p.id} 
+                            positions={p.points} 
+                            color={p.color || "cyan"}
+                        >
+                            <Popup>{p.name}</Popup>
+                        </Polygon>
+                    ))}
                 </FeatureGroup>
             )}
             
             {newAdLocation && <Marker position={newAdLocation} icon={DefaultIcon}><Popup>New Ad</Popup></Marker>}
             {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Result</Popup></Marker>}
             
-            {radarResults && <Popup position={radarResults.pos} onClose={()=>setRadarResults(null)}><div className="min-w-[180px]"><div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-xs">Growth Radar</div>{radarResults.nodes.map((n,i)=><div key={i} className="flex justify-between text-xs border-b py-1"><span>{n.name}</span><b>{n.dist} km</b></div>)}</div></Popup>}
+            {/* --- RADAR RESULTS --- */}
+            {radarResults && (
+                <Popup position={radarResults.pos} onClose={()=>setRadarResults(null)}>
+                    <div className="min-w-[180px]">
+                        <div className="bg-purple-600 text-white p-2 -m-3 mb-2 rounded-t font-bold text-xs">
+                            Growth Radar
+                        </div>
+                        {radarResults.nodes.map((n,i)=>(
+                            <div key={i} className="flex justify-between text-xs border-b py-1">
+                                <span>{n.name}</span><b>{n.dist} km</b>
+                            </div>
+                        ))}
+                    </div>
+                </Popup>
+            )}
             
             <MapClickHandler />
         </MapContainer>
       )}
       </div>
 
-      {/* --- SUB-TOOLBAR (DESKTOP) --- */}
+      {/* --- DESKTOP SUB-TOOLBAR --- */}
       {viewMode === 'MARKETPLACE' && (
         <div className="hidden md:flex bg-white border-b px-4 py-2 gap-3 items-center text-xs shadow-sm">
             <span className="font-bold text-blue-800 flex items-center gap-1"><Store size={12}/> MARKET TOOLS:</span>
+            
             <button 
                 onClick={() => { if(!adMode) { setViewMode('MARKETPLACE'); setAdMode('SELL'); setRadarMode(false); alert("Tap map to post"); } else { setAdMode(null); setNewAdLocation(null); } }} 
                 className={`px-3 py-1 rounded border font-bold flex items-center gap-1 ${adMode ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-600 text-white'}`}
             >
                 {adMode ? <X size={12}/> : <PlusCircle size={12}/>} {adMode ? 'Cancel' : 'Post Free Ad'}
             </button>
+            
             <button 
                 onClick={() => { setRadarMode(!radarMode); setAdMode(null); }} 
                 className={`px-3 py-1 rounded border font-bold flex items-center gap-1 ${radarMode ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 border-purple-200'}`}
             >
                 {radarMode ? <Zap size={12} className="animate-pulse"/> : <Radar size={12}/>} {radarMode ? 'Stop Radar' : 'Growth Radar'}
             </button>
-            <button onClick={() => setShowLinksModal(true)} className="px-3 py-1 rounded border border-gray-200 bg-gray-50 text-gray-700 font-bold flex items-center gap-1 hover:bg-gray-100">
+            
+            <button 
+                onClick={() => setShowLinksModal(true)} 
+                className="px-3 py-1 rounded border border-gray-200 bg-gray-50 text-gray-700 font-bold flex items-center gap-1 hover:bg-gray-100"
+            >
                 <Globe size={12}/> Verify Land
             </button>
         </div>
       )}
 
-      {/* --- BOTTOM NAVIGATION BAR (MOBILE) --- */}
+      {/* --- MOBILE BOTTOM NAVIGATION --- */}
       <div className="fixed bottom-0 w-full bg-white border-t border-gray-200 flex justify-around py-2 md:hidden z-[3000] text-[10px] font-bold text-gray-500">
-          <button onClick={() => setViewMode('MARKETPLACE')} className={`flex flex-col items-center ${viewMode==='MARKETPLACE' ? 'text-blue-600' : ''}`}>
+          <button 
+              onClick={() => setViewMode('MARKETPLACE')} 
+              className={`flex flex-col items-center ${viewMode==='MARKETPLACE' ? 'text-blue-600' : ''}`}
+          >
               <Home size={20}/> Market
           </button>
           
-          <button onClick={() => { setRadarMode(!radarMode); setAdMode(null); setViewMode('MARKETPLACE'); }} className={`flex flex-col items-center ${radarMode ? 'text-purple-600 animate-pulse' : ''}`}>
+          <button 
+              onClick={() => { setRadarMode(!radarMode); setAdMode(null); setViewMode('MARKETPLACE'); }} 
+              className={`flex flex-col items-center ${radarMode ? 'text-purple-600 animate-pulse' : ''}`}
+          >
               <Radar size={20}/> Radar
           </button>
           
@@ -826,65 +1186,132 @@ const RealEstateSearchApp = () => {
           <button onClick={() => setShowLinksModal(true)} className="flex flex-col items-center">
               <Globe size={20}/> Verify
           </button>
+          
           {isAdmin ? (
-              <button onClick={() => setViewMode('ADMIN')} className={`flex flex-col items-center ${viewMode==='ADMIN' ? 'text-purple-600' : ''}`}><List size={20}/> Admin</button>
+              <button 
+                  onClick={() => setViewMode('ADMIN')} 
+                  className={`flex flex-col items-center ${viewMode==='ADMIN' ? 'text-purple-600' : ''}`}
+              >
+                  <List size={20}/> Admin
+              </button>
           ) : (
-              <button onClick={() => setShowPremiumRequest(true)} className="flex flex-col items-center text-yellow-600"><Award size={20}/> Audit</button>
+              <button 
+                  onClick={() => setShowPremiumRequest(true)} 
+                  className="flex flex-col items-center text-yellow-600"
+              >
+                  <Award size={20}/> Audit
+              </button>
           )}
       </div>
 
-      {/* --- POST AD MODAL (FULL) --- */}
+      {/* --------------------------------------------------------- */}
+      {/* --- MODALS (POST, EDIT, VIEW, AUDIT) --- */}
+      {/* --------------------------------------------------------- */}
+
+      {/* --- POST AD MODAL --- */}
       {newAdLocation && (
           <div className="fixed bottom-20 left-4 right-4 md:bottom-4 md:left-4 md:w-80 md:right-auto z-[5000] bg-white p-4 rounded-xl shadow-2xl border-2 border-blue-500 animate-in slide-in-from-bottom-10 max-h-[80vh] overflow-y-auto">
                <div className="flex justify-between items-center mb-2 border-b pb-2">
                    <h3 className="font-bold text-blue-600">Post New Ad</h3>
-                   <button onClick={() => { setNewAdLocation(null); setAdMode(null); }} className="bg-gray-100 p-1 rounded-full"><X size={16}/></button>
+                   <button 
+                       onClick={() => { setNewAdLocation(null); setAdMode(null); }} 
+                       className="bg-gray-100 p-1 rounded-full"
+                   >
+                       <X size={16}/>
+                   </button>
                </div>
+               
                <div className="space-y-2">
-                   <select className="w-full border p-2 rounded text-sm font-bold" onChange={e => setNewAdData({...newAdData, type: e.target.value})}>
+                   <select 
+                       className="w-full border p-2 rounded text-sm font-bold" 
+                       onChange={e => setNewAdData({...newAdData, type: e.target.value})}
+                   >
                        <option value="SELL">Sell Plot</option>
                        <option value="LOOKING">Looking For</option>
                    </select>
                    
                    <div className="flex gap-2">
-                       <input placeholder="Size" type="number" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, size: e.target.value})} />
-                       <input placeholder="Price" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, price: e.target.value})} />
+                       <input 
+                           placeholder="Size" 
+                           type="number" 
+                           className="w-full border p-2 rounded text-sm" 
+                           onChange={e => setNewAdData({...newAdData, size: e.target.value})} 
+                       />
+                       <input 
+                           placeholder="Price" 
+                           className="w-full border p-2 rounded text-sm" 
+                           onChange={e => setNewAdData({...newAdData, price: e.target.value})} 
+                       />
                    </div>
                    
-                   <input placeholder="WhatsApp" className="w-full border p-2 rounded text-sm" onChange={e => setNewAdData({...newAdData, contact: e.target.value})} />
-                   <textarea placeholder="Description (e.g. 'Corner plot, clear title')" className="w-full border p-2 rounded text-sm h-16" onChange={e => setNewAdData({...newAdData, desc: e.target.value})} />
+                   <input 
+                       placeholder="WhatsApp" 
+                       className="w-full border p-2 rounded text-sm" 
+                       onChange={e => setNewAdData({...newAdData, contact: e.target.value})} 
+                   />
                    
-                   {/* MEDIA UPLOADS (Expanded for clarity) */}
+                   <textarea 
+                       placeholder="Description (e.g. 'Corner plot, clear title')" 
+                       className="w-full border p-2 rounded text-sm h-16" 
+                       onChange={e => setNewAdData({...newAdData, desc: e.target.value})} 
+                   />
+                   
+                   {/* UPLOAD BUTTONS */}
                    <div className="grid grid-cols-2 gap-2">
                        <div className={`border border-dashed p-2 rounded text-center ${newAdData.image_url ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
                            <label className="text-xs cursor-pointer block">
                                <UploadCloud size={14} className={`mx-auto ${newAdData.image_url ? 'text-green-600' : 'text-gray-400'}`}/>
-                               <span className={newAdData.image_url ? 'text-green-700 font-bold' : ''}>{newAdData.image_url ? '✅ Ready' : 'Photo'}</span>
-                               <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image')} />
+                               <span className={newAdData.image_url ? 'text-green-700 font-bold' : ''}>
+                                   {newAdData.image_url ? '✅ Ready' : 'Photo'}
+                               </span>
+                               <input 
+                                   type="file" 
+                                   accept="image/*" 
+                                   className="hidden" 
+                                   onChange={(e) => handleFileUpload(e, 'image')} 
+                               />
                            </label>
                        </div>
+                       
                        <div className={`border border-dashed p-2 rounded text-center ${newAdData.audio_url ? 'border-green-500 bg-green-50' : 'border-purple-300'}`}>
                            <label className="text-xs cursor-pointer block">
                                <Mic size={14} className={`mx-auto ${newAdData.audio_url ? 'text-green-600' : 'text-purple-400'}`}/>
-                               <span className={newAdData.audio_url ? 'text-green-700 font-bold' : ''}>{newAdData.audio_url ? '✅ Ready' : 'Audio'}</span>
-                               <input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFileUpload(e, 'audio')} />
+                               <span className={newAdData.audio_url ? 'text-green-700 font-bold' : ''}>
+                                   {newAdData.audio_url ? '✅ Ready' : 'Audio'}
+                               </span>
+                               <input 
+                                   type="file" 
+                                   accept="audio/*" 
+                                   className="hidden" 
+                                   onChange={(e) => handleFileUpload(e, 'audio')} 
+                               />
                            </label>
                        </div>
                    </div>
                    
-                   <input placeholder="Video Link (YouTube)" className="w-full border p-2 rounded text-sm bg-gray-50" onChange={e => setNewAdData({...newAdData, video_url: e.target.value})} />
+                   <input 
+                       placeholder="Video Link (YouTube)" 
+                       className="w-full border p-2 rounded text-sm bg-gray-50" 
+                       onChange={e => setNewAdData({...newAdData, video_url: e.target.value})} 
+                   />
                    
-                   <button onClick={handlePostAd} disabled={uploading || !newAdData.contact || !newAdData.price} className={`w-full py-2 rounded font-bold ${uploading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                   <button 
+                       onClick={handlePostAd} 
+                       disabled={uploading || !newAdData.contact || !newAdData.price} 
+                       className={`w-full py-2 rounded font-bold ${uploading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                   >
                        {uploading ? 'Uploading...' : 'Submit Ad'}
                    </button>
                </div>
           </div>
       )}
 
-      {/* --- VIEW AD MODAL (WELCOME CARD) --- */}
+      {/* --- VIEW AD MODAL --- */}
       {viewingAd && (
           <div className="fixed inset-0 bg-black/70 z-[9999] flex justify-center items-center p-4 animate-in fade-in">
               <div className={`rounded-xl w-full max-w-sm overflow-hidden flex flex-col shadow-2xl ${viewingAd.price === '0' ? 'bg-slate-900 text-white border-2 border-yellow-500' : 'bg-white'}`}>
+                  
+                  {/* IMAGE HEADER */}
                   <div className="h-48 relative bg-gray-100 group">
                       {viewingAd.image_url ? 
                           <img 
@@ -894,7 +1321,7 @@ const RealEstateSearchApp = () => {
                           /> 
                       : <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">NO IMAGE</div>}
                       
-                      {/* Zoom Hint Overlay */}
+                      {/* Zoom Hint */}
                       {viewingAd.image_url && (
                           <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100">
                               <Maximize2 className="text-white"/>
@@ -906,20 +1333,26 @@ const RealEstateSearchApp = () => {
                   </div>
                   
                   <div className="p-5">
+                      {/* DETAILS HEADER */}
                       <div className="flex justify-between items-start mb-2">
                           <div>
-                              <h2 className={`text-2xl font-black ${viewingAd.price === '0' ? 'text-yellow-400' : 'text-slate-800'}`}>{viewingAd.price === '0' ? 'JOIN NOW (FREE)' : viewingAd.price}</h2>
-                              <p className={`text-sm font-bold ${viewingAd.price === '0' ? 'text-gray-400' : 'text-slate-500'}`}>{viewingAd.size} | {viewingAd.ad_type}</p>
+                              <h2 className={`text-2xl font-black ${viewingAd.price === '0' ? 'text-yellow-400' : 'text-slate-800'}`}>
+                                  {viewingAd.price === '0' ? 'JOIN NOW (FREE)' : viewingAd.price}
+                              </h2>
+                              <p className={`text-sm font-bold ${viewingAd.price === '0' ? 'text-gray-400' : 'text-slate-500'}`}>
+                                  {viewingAd.size} | {viewingAd.ad_type}
+                              </p>
                           </div>
                       </div>
                       
-                      {/* FIXED: Scrollable Description Box */}
+                      {/* SCROLLABLE DESCRIPTION */}
                       {viewingAd.description && (
-                          <div className={`text-sm mb-4 p-3 rounded-lg border max-h-32 overflow-y-auto custom-scrollbar ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-slate-50 text-gray-700 border-slate-200'}`}>
+                          <div className={`text-sm mb-4 p-3 rounded-lg border max-h-60 overflow-y-auto custom-scrollbar whitespace-pre-wrap ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700 text-gray-300' : 'bg-slate-50 text-gray-700 border-slate-200'}`}>
                               {viewingAd.description}
                           </div>
                       )}
                       
+                      {/* AUDIO */}
                       {viewingAd.audio_url && (
                           <div className={`mb-4 p-2 rounded border ${viewingAd.price === '0' ? 'bg-slate-800 border-slate-700' : 'bg-purple-50 border-purple-100'}`}>
                               <p className={`text-xs font-bold flex items-center gap-1 mb-1 ${viewingAd.price === '0' ? 'text-yellow-500' : 'text-purple-700'}`}><Mic size={12}/> Voice Note</p>
@@ -927,8 +1360,12 @@ const RealEstateSearchApp = () => {
                           </div>
                       )}
 
+                      {/* ACTION BUTTONS */}
                       <div className="space-y-2">
-                          <button onClick={() => window.open(`https://wa.me/${viewingAd.contact_info}`, '_blank')} className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${viewingAd.price === '0' ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-green-600 text-white hover:bg-green-700'}`}>
+                          <button 
+                              onClick={() => window.open(`https://wa.me/${viewingAd.contact_info}`, '_blank')} 
+                              className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${viewingAd.price === '0' ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                          >
                               <MessageCircle size={18}/> WhatsApp Owner
                           </button>
                           
@@ -976,7 +1413,7 @@ const RealEstateSearchApp = () => {
           </div>
       )}
       
-      {/* --- TRUTH ENGINE MODAL (FULL) --- */}
+      {/* --- TRUTH ENGINE MODAL (AUDIT) --- */}
       {showRatingModal && (
         <div className="fixed inset-0 bg-black/80 z-[7000] flex justify-center items-center p-4 backdrop-blur-sm">
             <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
@@ -1067,7 +1504,7 @@ const RealEstateSearchApp = () => {
         </div>
       )}
 
-      {/* --- EDIT AD MODAL (FULL) --- */}
+      {/* --- EDIT AD MODAL --- */}
       {editingAd && (
           <div className="fixed inset-0 bg-black/60 z-[9999] flex justify-center items-center backdrop-blur-sm p-4">
               <div className="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl overflow-y-auto max-h-[90vh]">
