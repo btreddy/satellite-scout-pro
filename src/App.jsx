@@ -171,112 +171,119 @@ const GoldIcon = L.icon({
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
-
-// ============================================================================
-// --- COMPONENT: LANDING PAGE (THE TRUST PORTAL) ---
-// ============================================================================
 const LandingPage = ({ onEnter }) => {
+    
+    // ACTION: Open WhatsApp (Replace number with your business line)
+    const handleFounderChat = () => {
+        window.open("https://wa.me/917013007595", "_blank");
+    };
+
     return (
-        <div 
-            className="fixed inset-0 z-[9999] bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-700 overflow-y-auto"
-        >
-            <div className="max-w-4xl w-full mt-10 md:mt-0">
+        <div className="fixed inset-0 z-[9999] bg-slate-900 text-white flex flex-col items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-700">
+            <div className="max-w-5xl w-full text-center mt-10 md:mt-0">
                 
-                {/* HERO BRANDING */}
-                <div className="mb-6">
-                    <div className="inline-block p-3 rounded-full bg-slate-800 border border-slate-700 shadow-2xl mb-4">
-                        <Crosshair 
-                            size={48} 
-                            className="text-yellow-500 animate-spin-slow"
-                        />
+                {/* 1. HERO SECTION: IDENTITY SHIFT */}
+                <div className="mb-8">
+                    <div className="inline-block p-4 rounded-full bg-slate-800 border border-slate-700 shadow-2xl mb-4 relative">
+                        <Crosshair size={56} className="text-blue-500 animate-spin-slow"/>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"/>
+                        </div>
                     </div>
-                    <h1 
-                        className="text-4xl md:text-6xl font-black tracking-tighter mb-2 bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent"
-                    >
+                    <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-2 bg-gradient-to-r from-white via-slate-200 to-slate-500 bg-clip-text text-transparent">
                         SAFE LAND
                     </h1>
-                    <p className="text-yellow-500 font-bold tracking-widest uppercase text-xs md:text-sm">
-                        Intelligence Console
+                    <p className="text-blue-400 font-bold tracking-[0.2em] uppercase text-xs md:text-sm mb-4">
+                        Satellite Intelligence Console
                     </p>
+                    <h2 className="text-xl md:text-2xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
+                        "We Verify the <span className="text-white font-bold">Where</span>.<br/>
+                        You Decide the <span className="text-white font-bold">How Much</span>."
+                    </h2>
                 </div>
 
-                {/* HEADLINE */}
-                <h2 className="text-2xl md:text-4xl font-bold mb-4 leading-tight">
-                    Stop Buying Blind.<br/>
-                    <span className="text-blue-400">Start Buying Truth.</span>
-                </h2>
-
-                {/* VALUE PROPOSITION (TICKER) */}
-                <div className="flex flex-wrap justify-center gap-4 mb-8 text-xs md:text-sm font-bold text-slate-400">
-                    <span className="flex items-center gap-1 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
-                        <Users size={12} className="text-green-400"/> Agents: Verified Leads
-                    </span>
-                    <span className="flex items-center gap-1 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
-                        <DollarSign size={12} className="text-yellow-400"/> Developers: Save Costs
-                    </span>
-                    <span className="flex items-center gap-1 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
-                        <CheckCircle size={12} className="text-blue-400"/> Buyers: 100% Transparency
-                    </span>
-                </div>
-
-                {/* THREE PILLARS OF TRUST */}
-                <div className="grid md:grid-cols-3 gap-4 mb-8 text-left max-w-2xl mx-auto">
-                    {/* Pillar 1 */}
-                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors">
-                        <div className="text-green-400 font-bold mb-1 flex items-center gap-2">
-                            <Check size={16}/> Satellite Verified
-                        </div>
-                        <p className="text-slate-400 text-sm">
-                            See exact locations, boundaries, and FTL buffers.
-                        </p>
-                    </div>
+                {/* 2. THE PAIN POINT MATRIX (Why We Exist) */}
+                <div className="grid md:grid-cols-2 gap-6 text-left max-w-4xl mx-auto mb-10">
                     
-                    {/* Pillar 2 */}
-                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors">
-                        <div className="text-purple-400 font-bold mb-1 flex items-center gap-2">
-                            <Mic size={16}/> Owner's Voice
+                    {/* CARD 1: FOR BUYERS (SAFETY) */}
+                    <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 hover:border-green-500/50 transition-all group">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-green-900/30 rounded-lg text-green-400"><ShieldCheck size={24}/></div>
+                            <h3 className="font-bold text-lg text-white">For Buyers: The Truth Engine</h3>
                         </div>
-                        <p className="text-slate-400 text-sm">
-                            Listen to the owner directly. No middleman distortion.
-                        </p>
+                        <ul className="space-y-3 text-sm text-slate-400">
+                            <li className="flex gap-2">
+                                <X size={16} className="text-red-500 shrink-0"/> 
+                                <span>Fear: Is this land in a Lake/FTL zone?</span>
+                            </li>
+                            <li className="flex gap-2">
+                                <CheckCircle size={16} className="text-green-400 shrink-0"/> 
+                                <span className="text-slate-200 font-bold">Solution: Satellite Verification. See water buffers instantly.</span>
+                            </li>
+                            <li className="flex gap-2 mt-2 pt-2 border-t border-slate-700">
+                                <Mic size={16} className="text-purple-400 shrink-0"/> 
+                                <span><b>Owner's Voice:</b> Hear directly from the seller. No distortion.</span>
+                            </li>
+                        </ul>
                     </div>
-                    
-                    {/* Pillar 3 */}
-                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors">
-                        <div className="text-yellow-400 font-bold mb-1 flex items-center gap-2">
-                            <ShieldCheck size={16}/> Govt Data
+
+                    {/* CARD 2: FOR AGENTS (GROWTH) */}
+                    <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 hover:border-blue-500/50 transition-all group">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-blue-900/30 rounded-lg text-blue-400"><Users size={24}/></div>
+                            <h3 className="font-bold text-lg text-white">For Agents: Business Protection</h3>
                         </div>
-                        <p className="text-slate-400 text-sm">
-                            Linked with HMDA, RERA, and <b>Bhubharathi</b>.
-                        </p>
+                        <ul className="space-y-3 text-sm text-slate-400">
+                            <li className="flex gap-2">
+                                <X size={16} className="text-red-500 shrink-0"/> 
+                                <span>Fear: If I share a link, leads call the Owner.</span>
+                            </li>
+                            <li className="flex gap-2">
+                                <CheckCircle size={16} className="text-blue-400 shrink-0"/> 
+                                <span className="text-slate-200 font-bold">Solution: Agent Multiplier. The link routes calls to YOU.</span>
+                            </li>
+                            <li className="flex gap-2 mt-2 pt-2 border-t border-slate-700">
+                                <Lock size={16} className="text-yellow-400 shrink-0"/> 
+                                <span><b>Private Showroom:</b> Exclusive links hide competitors' ads.</span>
+                            </li>
+                        </ul>
                     </div>
                 </div>
 
-                {/* ACTION BUTTONS */}
-                <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
+                {/* 3. CALL TO ACTION (THE DUAL GATES) */}
+                <div className="flex flex-col md:flex-row items-center justify-center gap-4">
+                    
+                    {/* BUTTON A: THE AI CONSOLE (Primary) */}
                     <button 
                         onClick={onEnter} 
-                        className="w-full md:w-auto group bg-blue-600 hover:bg-blue-500 text-white text-lg font-bold px-8 py-4 rounded-full shadow-lg shadow-blue-900/50 transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+                        className="w-full md:w-auto group relative bg-blue-600 hover:bg-blue-500 text-white text-lg font-bold px-8 py-4 rounded-xl shadow-2xl shadow-blue-900/50 transition-all transform hover:scale-105 overflow-hidden"
                     >
-                        Launch Console <ChevronRight className="group-hover:translate-x-1 transition-transform"/>
+                        <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 skew-x-12"/>
+                        <span className="flex items-center justify-center gap-3">
+                            🤖 LAUNCH CONSOLE <ChevronRight className="group-hover:translate-x-1 transition-transform"/>
+                        </span>
                     </button>
-                    
+
+                    {/* BUTTON B: TALK TO FOUNDER (Secondary/Ghost) */}
                     <button 
-                        onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=Hi, I want to know more about Safe Land.`, '_blank')} 
-                        className="w-full md:w-auto bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold px-6 py-4 rounded-full flex items-center justify-center gap-2 border border-slate-600 transition-all"
+                        onClick={handleFounderChat}
+                        className="w-full md:w-auto group border border-slate-600 hover:border-green-500 bg-slate-800/50 hover:bg-green-900/20 text-slate-300 hover:text-green-400 text-lg font-bold px-8 py-4 rounded-xl transition-all"
                     >
-                        <MessageCircle size={18} className="text-green-400"/> Talk to Founder
+                        <span className="flex items-center justify-center gap-3">
+                            <MessageCircle size={20}/> Talk to Founder
+                        </span>
                     </button>
+
                 </div>
                 
-                <p className="mt-8 text-slate-600 text-xs">
-                    Hyderabad • Telangana • India
+                <p className="mt-6 text-slate-500 text-[10px] tracking-widest uppercase">
+                    V18.0 • Satellite Live • Hyderabad Region
                 </p>
+
             </div>
         </div>
     );
 };
-
 // ============================================================================
 // --- MAIN APPLICATION COMPONENT ---
 // ============================================================================
