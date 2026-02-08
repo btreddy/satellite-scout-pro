@@ -171,13 +171,11 @@ const GoldIcon = L.icon({
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
-const LandingPage = ({ onEnter }) => {
-    
-    // ACTION: Open WhatsApp (Replace number with your business line)
-    const handleFounderChat = () => {
-        window.open("https://wa.me/917013007595", "_blank");
-    };
 
+// ============================================================================
+// --- COMPONENT: LANDING PAGE (THE INTELLIGENCE CONSOLE v18) ---
+// ============================================================================
+const LandingPage = ({ onEnter }) => {
     return (
         <div className="fixed inset-0 z-[9999] bg-slate-900 text-white flex flex-col items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-700">
             <div className="max-w-5xl w-full text-center mt-10 md:mt-0">
@@ -250,36 +248,44 @@ const LandingPage = ({ onEnter }) => {
                     </div>
                 </div>
 
-                {/* 3. CALL TO ACTION (THE DUAL GATES) */}
-                <div className="flex flex-col md:flex-row items-center justify-center gap-4">
+                {/* 3. CALL TO ACTION (THE LAUNCH) */}
+                <div className="flex flex-col items-center gap-6 mt-8">
                     
-                    {/* BUTTON A: THE AI CONSOLE (Primary) */}
+                    {/* PRIMARY: LAUNCH APP */}
                     <button 
                         onClick={onEnter} 
-                        className="w-full md:w-auto group relative bg-blue-600 hover:bg-blue-500 text-white text-lg font-bold px-8 py-4 rounded-xl shadow-2xl shadow-blue-900/50 transition-all transform hover:scale-105 overflow-hidden"
+                        className="group relative bg-blue-600 hover:bg-blue-500 text-white text-xl font-black px-12 py-6 rounded-full shadow-2xl shadow-blue-900/50 transition-all transform hover:scale-105 overflow-hidden w-full md:w-auto min-w-[300px]"
                     >
                         <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 skew-x-12"/>
                         <span className="flex items-center justify-center gap-3">
-                            🤖 LAUNCH CONSOLE <ChevronRight className="group-hover:translate-x-1 transition-transform"/>
+                            LAUNCH CONSOLE <ChevronRight className="group-hover:translate-x-1 transition-transform" size={24}/>
                         </span>
                     </button>
 
-                    {/* BUTTON B: TALK TO FOUNDER (Secondary/Ghost) */}
-                    <button 
-                        onClick={handleFounderChat}
-                        className="w-full md:w-auto group border border-slate-600 hover:border-green-500 bg-slate-800/50 hover:bg-green-900/20 text-slate-300 hover:text-green-400 text-lg font-bold px-8 py-4 rounded-xl transition-all"
-                    >
-                        <span className="flex items-center justify-center gap-3">
-                            <MessageCircle size={20}/> Talk to Founder
-                        </span>
-                    </button>
+                    {/* SECONDARY: AI & FOUNDER (Side by Side) */}
+                    <div className="flex flex-wrap justify-center gap-4 w-full">
+                        
+                        {/* NEW: AI AGENT BUTTON */}
+                        <button 
+                             onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}?text=I%20want%20to%20test%20the%20AI%20Agent`, '_blank')}
+                             className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 hover:text-white border border-purple-500/50 hover:border-purple-400 transition-all px-6 py-3 rounded-full font-bold text-sm shadow-lg shadow-purple-900/20"
+                        >
+                            <Zap size={18} className="text-purple-400 animate-pulse"/> AI Agent (Beta)
+                        </button>
 
+                        {/* FOUNDER BUTTON */}
+                        <button 
+                            onClick={() => window.open(`https://wa.me/${ADMIN_PHONE}`, '_blank')}
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 transition-all px-6 py-3 rounded-full font-bold text-sm"
+                        >
+                            <MessageCircle size={18} className="text-green-500"/> Talk to Founder
+                        </button>
+                    </div>
+
+                    <p className="text-slate-600 text-[10px] tracking-widest uppercase mt-4">
+                        V18.1 • Satellite Live • Hyderabad Region
+                    </p>
                 </div>
-                
-                <p className="mt-6 text-slate-500 text-[10px] tracking-widest uppercase">
-                    V18.0 • Satellite Live • Hyderabad Region
-                </p>
-
             </div>
         </div>
     );
