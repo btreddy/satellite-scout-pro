@@ -294,11 +294,92 @@ const LandingPage = ({ onEnter }) => {
     );
 };
 // ============================================================================
+// --- COMPONENT: AUDIT WORKFLOW (The "Guided Diligence" Panel) ---
+// ============================================================================
+const AuditWorkflow = ({ property, onClose }) => {
+    if (!property) return null;
+
+    const requestExpertAudit = () => {
+        // This opens WhatsApp with a pre-filled message
+        const text = `Hello Safe Land Desk! 🛡️\n\nI need an Expert Audit Report for Property ID: ${property.id} (${property.location}).\nPlease send payment details.`;
+        window.open(`https://wa.me/919000000000?text=${encodeURIComponent(text)}`, '_blank'); // Replace 919000... with ADMIN_PHONE variable if available
+    };
+
+    return (
+        <div className="fixed inset-0 z-[11000] flex items-center justify-center md:justify-end md:items-start md:pt-20 md:pr-4 pointer-events-none">
+            <div className="bg-slate-900 border border-slate-700 w-full md:w-96 h-auto md:max-h-[80vh] shadow-2xl rounded-t-2xl md:rounded-xl pointer-events-auto flex flex-col overflow-hidden animate-in slide-in-from-right fade-in duration-300">
+                
+                {/* Header */}
+                <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
+                    <div>
+                        <h3 className="text-white font-bold text-base">Due Diligence Audit</h3>
+                        <p className="text-blue-400 text-[10px] uppercase tracking-wider">Property ID: {property.id}</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors"><X size={20}/></button>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
+                    
+                    {/* STEP 1: RERA */}
+                    <div className="mb-6 relative pl-4 border-l-2 border-slate-700">
+                        <div className="absolute left-[-5px] top-0 w-2.5 h-2.5 rounded-full bg-slate-500 ring-4 ring-slate-900"/>
+                        <h4 className="text-slate-200 font-bold text-sm mb-1 flex items-center gap-2">
+                            <ShieldCheck size={16} className="text-green-500"/> 1. Verify RERA Status
+                        </h4>
+                        <p className="text-xs text-slate-400 mb-3 leading-relaxed">Ensure this venture is legally approved by the state (TSRERA) to protect your investment from litigation.</p>
+                        <button onClick={() => window.open('https://rera.telangana.gov.in/', '_blank')} className="w-full text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 py-2 px-3 rounded flex items-center justify-between transition-colors group">
+                            Open TG RERA Portal <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform"/>
+                        </button>
+                    </div>
+
+                    {/* STEP 2: Dharani */}
+                    <div className="mb-6 relative pl-4 border-l-2 border-slate-700">
+                        <div className="absolute left-[-5px] top-0 w-2.5 h-2.5 rounded-full bg-slate-500 ring-4 ring-slate-900"/>
+                        <h4 className="text-slate-200 font-bold text-sm mb-1 flex items-center gap-2">
+                            <Layers size={16} className="text-yellow-500"/> 2. Title & Prohibitions
+                        </h4>
+                        <p className="text-xs text-slate-400 mb-3 leading-relaxed">Check Dharani records to ensure the Survey No. is not in the "Prohibited List" (Assigned/Endowment land).</p>
+                        <button onClick={() => window.open('https://dharani.telangana.gov.in/', '_blank')} className="w-full text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 py-2 px-3 rounded flex items-center justify-between transition-colors group">
+                            Open Dharani Records <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform"/>
+                        </button>
+                    </div>
+
+                    {/* STEP 3: HMDA */}
+                    <div className="mb-6 relative pl-4 border-l-2 border-slate-700">
+                        <div className="absolute left-[-5px] top-0 w-2.5 h-2.5 rounded-full bg-slate-500 ring-4 ring-slate-900"/>
+                        <h4 className="text-slate-200 font-bold text-sm mb-1 flex items-center gap-2">
+                            <MapPin size={16} className="text-purple-500"/> 3. Zoning & FTL
+                        </h4>
+                        <p className="text-xs text-slate-400 mb-3 leading-relaxed">Verify HMDA Master Plan. Ensure it is Residential Zone (Yellow), not FTL/Water Body (Blue) or Buffer Zone.</p>
+                        <button onClick={() => window.open('https://www.hmda.gov.in/', '_blank')} className="w-full text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 py-2 px-3 rounded flex items-center justify-between transition-colors group">
+                            Check Master Plan <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform"/>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Footer: UPSELL */}
+                <div className="p-4 bg-slate-800/50 border-t border-slate-700">
+                    <div className="bg-blue-600/10 border border-blue-500/30 rounded-lg p-3">
+                        <h4 className="text-white font-bold text-sm mb-1 flex items-center gap-2"><Zap size={14} className="text-yellow-400 fill-yellow-400"/> Confusion? We can help.</h4>
+                        <p className="text-xs text-slate-300 mb-3">Get a certified <b>Safe Land Audit Report</b> created by our experts.</p>
+                        <button onClick={requestExpertAudit} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-lg text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-blue-500/25 transition-all">
+                            Request Expert Audit (₹499)
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    );
+};
+// ============================================================================
 // --- MAIN APPLICATION COMPONENT ---
 // ============================================================================
 const RealEstateSearchApp = () => {
   
   // --- STATE VARIABLES ---
+  const [auditProperty, setAuditProperty] = useState(null); // Controls the new panel
   
   // View Control
   const [showLanding, setShowLanding] = useState(true);
@@ -1117,11 +1198,14 @@ const RealEstateSearchApp = () => {
             </button>
             
             <button 
-                onClick={() => setShowLinksModal(true)} 
-                className="px-3 py-1 rounded border border-gray-200 bg-gray-50 text-gray-700 font-bold flex items-center gap-1 hover:bg-gray-100"
-            >
-                <Globe size={12}/> Verify Land
-            </button>
+    onClick={(e) => {
+        e.stopPropagation();
+        setAuditProperty(property); // <--- THIS OPENS THE NEW PANEL
+    }}
+    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+>
+    <ShieldCheck size={14} className="text-green-600"/> Verify Land
+</button>
         </div>
       )}
 
@@ -1202,6 +1286,12 @@ const RealEstateSearchApp = () => {
       {/* --------------------------------------------------------- */}
 
       {/* --- POST AD MODAL --- */}
+
+      {/* --- NEW AUDIT WORKFLOW PANEL --- */}
+            <AuditWorkflow 
+                property={auditProperty} 
+                onClose={() => setAuditProperty(null)} 
+            />
       {newAdLocation && (
           <div className="fixed bottom-20 left-4 right-4 md:bottom-4 md:left-4 md:w-80 md:right-auto z-[5000] bg-white p-4 rounded-xl shadow-2xl border-2 border-blue-500 animate-in slide-in-from-bottom-10 max-h-[80vh] overflow-y-auto">
                <div className="flex justify-between items-center mb-2 border-b pb-2">
