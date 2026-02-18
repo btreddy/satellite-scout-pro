@@ -5,7 +5,8 @@ import autoTable from 'jspdf-autotable';
 import { Phone, X, Download } from 'lucide-react';
 
 // --- IMPORTS ---
-import LandingPage from './components/LandingPage';
+// ...import LandingPage from './components/LandingPage';
+import MainShowcase from './components/MainShowcase';
 import { SmartNav } from './components/SmartNav';
 import MapBoard from './features/MapBoard';
 import AdminView from './features/AdminView';
@@ -167,8 +168,9 @@ const RealEstateSearchApp = () => {
   const handleSearch = async (e) => { if(e.key === 'Enter'){ const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}`); const data = await res.json(); if(data && data[0]) { setTempSearchMarker([data[0].lat, data[0].lon]); setIsSearchOpen(false); } } };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 font-sans text-gray-800">
-      {showLanding && <LandingPage onEnter={() => setShowLanding(false)} adminPhone={ADMIN_PHONE} />}
+    <div className="flex flex-col h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
+      {/* SHOWCASE OVERLAY (Fixed on top) */}
+      {showLanding && <MainShowcase onEnter={() => setShowLanding(false)} />}
       
       {fullScreenImage && (
           <div className="fixed inset-0 z-[11000] bg-black/95 flex justify-center items-center p-4 animate-in fade-in">
@@ -183,7 +185,7 @@ const RealEstateSearchApp = () => {
         
         {/* --- SMART NAVIGATION (HEADER + BOTTOM BARS) --- */}
         <SmartNav 
-            isAdmin={isAdmin} viewMode={viewMode} setViewMode={setViewMode} 
+            isAdmin={isAdmin} setIsAdmin={setIsAdmin}  viewMode={viewMode} setViewMode={setViewMode} 
             setShowPinModal={setShowPinModal} 
             setShowPremiumRequest={setShowRatingModal} // <--- WIRED TO AUDIT MODAL
             setShowLinksModal={setShowLinksModal}
@@ -192,11 +194,13 @@ const RealEstateSearchApp = () => {
             radarMode={radarMode} setRadarMode={setRadarMode} 
             infraMode={infraMode} setInfraMode={setInfraMode} // <--- WIRED NEW INFRA SCANNER
             setNewAdLocation={setNewAdLocation}
+            setShowLanding={setShowLanding}
         />
 
         <div className="flex-1 relative z-0 pb-16 md:pb-0"> 
           {viewMode === 'ADMIN' ? (
               <AdminView 
+              isAdmin={isAdmin} setIsAdmin={setIsAdmin}
                   marketAds={marketAds} selectedAds={selectedAds} toggleAdSelection={toggleAdSelection} setSelectedAds={setSelectedAds}
                   handleBulkDelete={handleBulkDelete} fetchMarketplaceAds={fetchMarketplaceAds} exclusiveAgent={exclusiveAgent}
                   setShowLinksModal={setShowLinksModal} setShowRatingModal={setShowRatingModal} handleApproveAd={handleApproveAd} handleDeleteAd={handleDeleteAd} setEditingAd={setEditingAd}
