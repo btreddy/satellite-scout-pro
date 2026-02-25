@@ -4,7 +4,7 @@ import { useMap, Polyline, CircleMarker, Popup } from 'react-leaflet';
 const InfraScanner = ({ active }) => {
     const map = useMap();
     const [infraData, setInfraData] = useState({ powerLines: [], amenities: [] });
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (!active) {

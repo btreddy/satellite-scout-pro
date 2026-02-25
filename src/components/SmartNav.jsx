@@ -8,7 +8,8 @@ export const SmartNav = ({
     setShowPinModal, setShowPremiumRequest, setShowLinksModal, 
     setIsSearchOpen, isSearchOpen, searchQuery, setSearchQuery, 
     handleSearch, adMode, setAdMode, radarMode, setRadarMode, 
-    setNewAdLocation, infraMode, setInfraMode
+    setNewAdLocation, infraMode, setInfraMode,
+    isSparkOpen, setIsSparkOpen
 }) => {
 
     const handleLockAction = () => {
@@ -141,6 +142,17 @@ export const SmartNav = ({
                         <Link size={20}/>
                         <span className="absolute right-16 bg-slate-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-slate-700">
                             Govt Verifications
+                        </span>
+                    </button>
+
+                    {/* --- NEW: SPARK AI BUTTON --- */}
+                    <button 
+                        onClick={() => setIsSparkOpen(!isSparkOpen)}
+                        className="group relative w-12 h-12 rounded-2xl flex items-center justify-center transition-all border-2 border-indigo-500/50 bg-gradient-to-br from-indigo-600 to-purple-700 text-white hover:scale-110 shadow-[0_0_20px_rgba(79,70,229,0.5)] mt-4 animate-bounce-slow"
+                    >
+                        <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Spark&backgroundColor=transparent" alt="Spark" className="w-8 h-8" />
+                        <span className="absolute right-16 bg-indigo-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-indigo-500">
+                            Ask Spark AI
                         </span>
                     </button>
 

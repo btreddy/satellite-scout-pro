@@ -1,94 +1,165 @@
-import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, LayersControl, Polygon, FeatureGroup, useMap, useMapEvents, Circle } from 'react-leaflet';
-import { EditControl } from "react-leaflet-draw";
-import L from 'leaflet';
-import { MapPin, X, Share2 } from 'lucide-react';
-import 'leaflet/dist/leaflet.css';
-import "leaflet-draw/dist/leaflet.draw.css";
+import React, { useRef, useEffect } from 'react';
+import Map, { Marker } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { MapPin, Zap, Target } from 'lucide-react';
 
-// IMPORT SCANNER (Ensure this file exists in the same folder!)
-import InfraScanner from './InfraScanner';
-
-// ICONS
-const DefaultIcon = L.icon({ iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png', shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] });
-const GoldIcon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] });
-L.Marker.prototype.options.icon = DefaultIcon;
-
-// COMPONENTS
-const FlyToSearchResult = ({ target }) => {
-    const map = useMap();
-    useEffect(() => { if (target) map.flyTo(target, 14, { duration: 1.5 }); }, [target]);
-    return null;
-};
-
-const MapClickHandler = ({ viewMode, adMode, radarMode, growthNodes, setNewAdLocation, setRadarResults, setTempSearchMarker }) => { // <--- Added setTempSearchMarker here
-    useMapEvents({
-        click: (e) => {
-            if (viewMode === 'MARKETPLACE' && adMode) {
-                setNewAdLocation(e.latlng);
-                setTempSearchMarker(null); // <--- THIS LINE CLEARS THE OLD SEARCH PIN
-            }
-            else if (viewMode === 'MARKETPLACE' && radarMode && growthNodes) {
-                const dists = growthNodes.map(node => ({ name: node.name, dist: (L.latLng(e.latlng).distanceTo([node.lat, node.lng]) / 1000).toFixed(1) })).sort((a,b) => a.dist - b.dist);
-                setRadarResults({ pos: e.latlng, nodes: dists });
-            }
-        }
-    });
-    return null;
-};
-
-// MAIN COMPONENT
 const MapBoard = ({ 
-    viewMode, marketAds = [], projects = [], newAdLocation, tempSearchMarker, radarResults, 
-    adMode, radarMode, infraMode, growthNodes = [], featureGroupRef, 
-    setNewAdLocation, setRadarResults, setAdMode, setViewingAd, handleShareAd,
-    setCurrentShape, setShowSaveForm, agentPhone 
+    flyLocation, 
+    adMode, 
+    newAdLocation, 
+    setNewAdLocation, 
+    marketAds = [], 
+    infraMode, 
+    radarMode,
+    showWater, // 👈 ADD THIS
+    showForest, // 👈 ADD THIS
+    mapStyle 
 }) => {
-    
-    // Default to Hyderabad Center if no location
-    const mapCenter = [17.2360, 78.4192];
+    const mapRef = useRef(null);
+
+    // --- 🚀 THE FLIGHT ENGINE ---
+    // Smoothly navigates the map when a search or location trigger occurs
+    useEffect(() => {
+        if (flyLocation && mapRef.current) {
+            mapRef.current.flyTo({
+                center: [flyLocation.lng, flyLocation.lat],
+                zoom: flyLocation.zoom || 14,
+                pitch: 60,
+                bearing: 20,
+                duration: 4000
+            });
+        }
+    }, [flyLocation]);
+
+    const initialViewState = {
+        longitude: 78.4867,
+        latitude: 17.3850,
+        zoom: 11.5,
+        pitch: 45,
+        bearing: -10
+    };
+
+    const handleMapClick = (e) => {
+        if (adMode) {
+            setNewAdLocation({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+        }
+    };
+
+    // --- 🛰️ THE SATELLITE ENGINE ---
+    // Dynamically switches between Google Hybrid and OpenStreetMap
+    const getMapStyle = () => {
+        if (mapStyle === 'satellite') {
+            return {
+                version: 8,
+                sources: {
+                    'hybrid-tiles': {
+                        type: 'raster',
+                        tiles: ['https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'], 
+                        tileSize: 256,
+                        attribution: '&copy; Google'
+                    }
+                },
+                layers: [{ id: 'hybrid-layer', type: 'raster', source: 'hybrid-tiles' }]
+            };
+        }
+        return {
+            version: 8,
+            sources: {
+                'osm-tiles': {
+                    type: 'raster',
+                    tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '&copy; OpenStreetMap'
+                }
+            },
+            layers: [{ id: 'osm-tiles-layer', type: 'raster', source: 'osm-tiles' }]
+        };
+    };
 
     return (
-        <MapContainer center={mapCenter} zoom={13} maxZoom={22} style={{ height: "100%", width: "100%" }} zoomControl={false}>
-            <LayersControl position="topright">
-                <LayersControl.BaseLayer name="Satellite"><TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri" maxNativeZoom={18} maxZoom={22} /></LayersControl.BaseLayer>
-                <LayersControl.BaseLayer checked name="Street"><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="OSM" /></LayersControl.BaseLayer>
-            </LayersControl>
-
-            <FlyToSearchResult target={tempSearchMarker} />
-            <MapClickHandler viewMode={viewMode} adMode={adMode} radarMode={radarMode} growthNodes={growthNodes} setNewAdLocation={setNewAdLocation} setRadarResults={setRadarResults} />
-
-            {/* NEW: INFRA SCANNER (Only runs if infraMode is strictly true) */}
-            <InfraScanner active={!!infraMode} />
-
-            {/* RADAR VISUALS (Safe Check: growthNodes &&) */}
-            {radarMode && growthNodes && growthNodes.map((node, i) => (
-                <Circle key={i} center={[node.lat, node.lng]} radius={2000} pathOptions={{ color: 'purple', fillColor: 'purple', fillOpacity: 0.1, dashArray: '10, 10' }} />
-            ))}
-
-            {/* ADS & MARKERS (Safe Check: marketAds &&) */}
-            {viewMode === 'MARKETPLACE' && marketAds && marketAds.map(ad => (
-                <Marker key={ad.id} position={[ad.lat, ad.lng]} icon={ad.price === '0' ? GoldIcon : DefaultIcon}>
-                    <Popup>
-                        <div className="p-2">
-                            <h3 className="font-bold">{ad.price}</h3>
-                            <button onClick={() => setViewingAd(ad)} className="bg-blue-600 text-white px-3 py-1 rounded text-xs mt-1">Details</button>
+        <div className="w-full h-full absolute inset-0 bg-slate-900">
+            <Map
+                ref={mapRef}
+                initialViewState={initialViewState}
+                mapStyle={getMapStyle()} 
+                onClick={handleMapClick}
+                maxPitch={85}
+            >
+                {/* 📍 RENDER APPROVED ASSETS (From Supabase) */}
+                {Array.isArray(marketAds) && marketAds.map((ad, idx) => (
+                    <Marker key={ad.id || idx} longitude={ad.lng} latitude={ad.lat} anchor="bottom">
+                        <div className="group relative cursor-pointer hover:scale-110 transition-all">
+                            <div className="absolute inset-0 bg-blue-500 rounded-full blur-md opacity-50 animate-pulse"></div>
+                            <MapPin size={32} className="text-blue-600 fill-white relative z-10" />
+                            
+                            {/* DYNAMIC TOOLTIP */}
+                            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white p-2 rounded shadow-2xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">
+                                <div className="text-[10px] font-black uppercase tracking-tighter">
+                                    {ad.price} | {ad.size} {ad.size_unit || 'Sq Yds'}
+                                </div>
+                                {ad.status === 'PENDING' && (
+                                    <div className="text-[8px] text-yellow-500 font-bold">⏳ AWAITING AUDIT</div>
+                                )}
+                            </div>
                         </div>
-                    </Popup>
-                </Marker>
-            ))}
+                    </Marker>
+                ))}
+                {/* 🌊 WATER BODY OVERLAYS (Light Blue Glow) */}
+                {showWater && (
+                    <Marker longitude={78.41} latitude={17.35} anchor="center">
+                        <div className="w-64 h-64 bg-blue-400/20 border-2 border-blue-400 rounded-full blur-xl animate-pulse flex items-center justify-center">
+                            <span className="text-blue-200 text-[10px] font-black uppercase tracking-widest bg-slate-900/50 px-2 py-1 rounded">
+                                OSMAN SAGAR BUFFER
+                            </span>
+                        </div>
+                    </Marker>
+                )}
 
-            {/* PLANNER (Safe Check: projects &&) */}
-            {viewMode === 'VENTURE' && (
-                <FeatureGroup ref={featureGroupRef}>
-                    <EditControl position="topright" onCreated={(e)=>{setCurrentShape(e); setShowSaveForm(true);}} draw={{ rectangle: false, circle: false, circlemarker: false, marker: false, polyline: false }} />
-                    {projects && projects.map(p => <Polygon key={p.id} positions={p.points} color={p.color || "cyan"}><Popup>{p.name}</Popup></Polygon>)}
-                </FeatureGroup>
-            )}
+                {/* 🌲 FOREST AREA (Green Zone Tint) */}
+                {showForest && (
+                    <Marker longitude={78.55} latitude={17.42} anchor="center">
+                        <div className="w-80 h-40 bg-emerald-900/30 border-2 border-emerald-500 rounded-3xl backdrop-blur-[2px] flex flex-col items-center justify-start pt-4">
+                            <div className="text-emerald-400 text-[8px] font-black uppercase bg-slate-900/80 px-3 py-1 rounded-full border border-emerald-500/50">
+                                RESERVED FOREST ZONE
+                            </div>
+                        </div>
+                    </Marker>
+                )}
 
-            {newAdLocation && <Marker position={newAdLocation} icon={DefaultIcon}><Popup>New Ad Location</Popup></Marker>}
-            {tempSearchMarker && <Marker position={tempSearchMarker} icon={DefaultIcon}><Popup>Search Result</Popup></Marker>}
-        </MapContainer>
+                {/* 📡 INFRA SCANNER: High Tension/Hazard Zones */}
+{infraMode && (
+    <Marker longitude={78.445} latitude={17.379} anchor="center">
+        <div className="bg-red-600/20 w-32 h-32 rounded-full animate-ping absolute border-2 border-red-500" />
+        <div className="bg-red-600 text-white px-3 py-1 rounded-full text-[10px] font-black flex items-center gap-1 shadow-xl">
+           ⚡ HIGH TENSION ZONE
+        </div>
+    </Marker>
+)}
+
+{/* 🛰️ GROWTH RADAR: High Growth Node */}
+{radarMode && (
+    <Marker longitude={78.348} latitude={17.447} anchor="center">
+        <div className="w-64 h-64 bg-orange-500/10 border-4 border-dashed border-orange-500/40 rounded-full animate-[spin_15s_linear_infinite] flex items-center justify-center">
+             <span className="bg-slate-900/90 text-orange-400 text-[9px] font-black px-3 py-1 rounded-full border border-orange-500">
+                GROWTH NODE: HITEC-II
+             </span>
+        </div>
+    </Marker>
+)}
+
+                {/* 🟢 ASSET PLACEMENT: Visualizes the new pin before saving */}
+                {newAdLocation && (
+                    <Marker longitude={newAdLocation.lng} latitude={newAdLocation.lat} anchor="bottom">
+                        <div className="text-emerald-500 animate-bounce drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
+                            <MapPin size={48} className="fill-emerald-100" />
+                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-emerald-500 text-black text-[10px] font-black px-2 py-1 rounded whitespace-nowrap">
+                                NEW PIN READY
+                            </div>
+                        </div>
+                    </Marker>
+                )}
+            </Map>
+        </div>
     );
 };
 

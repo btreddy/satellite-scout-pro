@@ -1,7 +1,7 @@
 import React from 'react';
 import { ChevronRight, Map, Users, ShieldCheck, Sparkles, ScanEye, MapPin } from 'lucide-react';
 
-const MainShowcase = ({ onEnter }) => {
+const MainShowcase = ({ onEnter, setIsSparkOpen }) => {
     return (
         <div className="fixed inset-0 z-[5000] bg-slate-950 text-white overflow-hidden flex flex-col md:flex-row">
             
@@ -104,19 +104,16 @@ const MainShowcase = ({ onEnter }) => {
             {/* --- FLOATING SPARK AVATAR (Correct Link) --- */}
             <div className="fixed bottom-6 right-6 z-50 animate-bounce-slow">
                  <button 
-                    onClick={() => window.open('https://safelanddeal.com/meet/', '_blank')} 
-                    className="group flex items-center justify-center p-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-yellow-500 shadow-[0_0_20px_rgba(16,185,129,0.5)] hover:scale-105 transition-transform"
-                >
-                    <div className="bg-slate-900 rounded-full p-2 pr-5 flex items-center gap-3 border border-slate-700">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-inner border-2 border-white/20">
-                            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Spark&backgroundColor=transparent" alt="Spark" className="w-7 h-7" />
-                        </div>
-                        <div className="text-left">
-                            <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider">ONLINE</p>
-                            <p className="text-xs font-black text-white">Ask Spark AI</p>
-                        </div>
-                    </div>
-                 </button>
+  onClick={() => setIsSparkOpen(true)}
+  className="relative bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg"
+>
+  {/* The Glowing Neon Badge */}
+  <span className="absolute -top-3 -right-3 bg-green-500 text-white text-[10px] uppercase font-extrabold px-2 py-1 rounded-full animate-pulse shadow-[0_0_12px_rgba(34,197,94,0.8)] border border-green-400 z-10">
+    100% Free
+  </span>
+  
+  Ask Spark AI ✨
+</button>
             </div>
             
         </div>

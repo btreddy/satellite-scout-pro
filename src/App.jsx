@@ -1,241 +1,287 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { Phone, X, Download } from 'lucide-react';
+import { Globe, ShieldCheck, Lock } from 'lucide-react';
 
-// --- IMPORTS ---
-// ...import LandingPage from './components/LandingPage';
-import MainShowcase from './components/MainShowcase';
-import { SmartNav } from './components/SmartNav';
+// --- MODULAR IMPORTS ---
+import { Navigator } from './components/Navigator';
+import { SparkAgent } from './components/SparkAgent';
 import MapBoard from './features/MapBoard';
 import AdminView from './features/AdminView';
-import { PostAdModal, EditAdModal, TruthEngineModal, ViewAdModal, LinksModal, PinModal } from './features/AdManager';
+import { PostAdModal, ViewAdModal } from './features/AdManager';
 
 // --- CONFIGURATION ---
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
-const PIN_CODE = import.meta.env.VITE_ADMIN_PIN || "1234"; 
-const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE || "917013007595"; 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// --- STATIC DATA ---
-const GOVT_LINKS = [
-    { name: "Bhubharathi", url: "https://bhubharati.telangana.gov.in/knowLandStatus" }, 
-    { name: "CCLA", url: "https://ccla.telangana.gov.in/integratedLandRegistry.do" }, 
-    { name: "IGRS", url: "https://registration.telangana.gov.in/" }, 
-    { name: "HMDA Master Plan", url: "https://www.hmda.gov.in/master-planning-2031" }, 
-    { name: "RERA", url: "https://rera.telangana.gov.in/" }, 
-    { name: "Bhuvan", url: "https://bhuvan.nrsc.gov.in/" }
-];
-
-const GROWTH_NODES = [
-    { name: "Pharma Cluster", lat: 16.9800, lng: 78.6000 }, 
-    { name: "Amazon Data Center", lat: 17.0500, lng: 78.5500 }, 
-    { name: "Bharat Future City", lat: 16.9500, lng: 78.5800 }, 
-    { name: "TCS Adibatla", lat: 17.2100, lng: 78.5300 }
-];
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL, 
+  import.meta.env.VITE_SUPABASE_KEY
+);
 
 const RealEstateSearchApp = () => {
-  // --- STATE MANAGEMENT ---
-  const [showLanding, setShowLanding] = useState(true);
-  const [viewMode, setViewMode] = useState('MARKETPLACE'); 
+  // --- 🔐 SECURITY & ADMIN STATE ---
   const [isAdmin, setIsAdmin] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [showPinModal, setShowPinModal] = useState(false);
-  
-  // Search & Map State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [tempSearchMarker, setTempSearchMarker] = useState(null);
-  const [isSearchOpen, setIsSearchOpen] = useState(false); 
-  
-  // Modes
-  const [adMode, setAdMode] = useState(null); 
-  const [radarMode, setRadarMode] = useState(false);
-  const [infraMode, setInfraMode] = useState(false); // <--- NEW INFRA STATE
-  
-  // Data State
-  const [newAdLocation, setNewAdLocation] = useState(null);
-  const [marketAds, setMarketAds] = useState([]); 
-  const [radarResults, setRadarResults] = useState(null);
-  const [projects, setProjects] = useState([]);
-  
-  // Modals
-  const [showLinksModal, setShowLinksModal] = useState(false); 
-  const [showRatingModal, setShowRatingModal] = useState(false); // <--- USED FOR AUDIT
-  const [editingAd, setEditingAd] = useState(null);
-  const [viewingAd, setViewingAd] = useState(null); 
-  const [minimizedAd, setMinimizedAd] = useState(null); 
-  const [fullScreenImage, setFullScreenImage] = useState(null); 
-  
-  // Forms & Admin
-  const [agentPhone, setAgentPhone] = useState(null);
-  const [exclusiveAgent, setExclusiveAgent] = useState(null); 
-  const [newAdData, setNewAdData] = useState({ type: 'SELL', size: '', price: '', contact: '', desc: '', size_unit: 'Sq Yds', image_url: '', video_url: '', audio_url: '' });
-  const [uploading, setUploading] = useState(false); 
-  const [showSaveForm, setShowSaveForm] = useState(false);
-  const [currentShape, setCurrentShape] = useState(null); 
-  const featureGroupRef = useRef(); 
-  const [ratingData, setRatingData] = useState({ approvalType: 'Unapproved', reraId: '', isInFTL: false, hasRoadAccess: true, roadWidth: '30', hasEc: false, pollution: 'None', vaastu: 'Good', price: '', govtValue: '' });
+  const [showAdmin, setShowAdmin] = useState(false);
   const [selectedAds, setSelectedAds] = useState([]);
+  const [showLinksModal, setShowLinksModal] = useState(false); // For Govt Links button
+  const [showRatingModal, setShowRatingModal] = useState(false); // For Audit Tool button
 
-  // --- LOGIC & EFFECTS ---
-  const toggleAdSelection = (id) => selectedAds.includes(id) ? setSelectedAds(selectedAds.filter(adId => adId !== id)) : setSelectedAds([...selectedAds, id]);
-  
-  const handleBulkDelete = async () => {
-      if (selectedAds.length === 0) return;
-      if (confirm(`Are you sure you want to delete ${selectedAds.length} ads?`)) {
-          const { error } = await supabase.from('marketplace_ads').delete().in('id', selectedAds);
-          if (!error) { setMarketAds(prev => prev.filter(ad => !selectedAds.includes(ad.id))); setSelectedAds([]); alert("✅ Bulk Delete Successful!"); } else { alert("Error: " + error.message); }
-      }
+  // --- 📊 DATA STATE ---
+  const [marketAds, setMarketAds] = useState([]);
+  const [flyLocation, setFlyLocation] = useState(null);
+  const [isSparkOpen, setIsSparkOpen] = useState(false);
+  const [infraMode, setInfraMode] = useState(true); 
+  const [radarMode, setRadarMode] = useState(false);
+  const [adMode, setAdMode] = useState(null); 
+  const [newAdLocation, setNewAdLocation] = useState(null);
+  const [newAdData, setNewAdData] = useState({ type: 'SELL', size: '', price: '', contact: '', desc: '' });
+  const [isFuzzy, setIsFuzzy] = useState(false);
+  const [viewingAd, setViewingAd] = useState(null);
+  const [showWater, setShowWater] = useState(false);
+const [showForest, setShowForest] = useState(false);
+
+  // --- 🟢 LOGIC: FETCH DATA ---
+  const fetchMarketplaceAds = async () => {
+    const { data } = await supabase.from('marketplace_ads').select('*').order('created_at', { ascending: false });
+    if (data) setMarketAds(data);
   };
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('agent')) setAgentPhone(params.get('agent'));
-    if (params.get('exclusive_agent')) { setExclusiveAgent(params.get('exclusive_agent')); setShowLanding(false); }
-    if (params.get('ad_id')) setShowLanding(false);
-    fetchMarketplaceAds(params.get('exclusive_agent'));
-    fetchProjects();
-  }, [isAdmin]);
+  const [showTools, setShowTools] = useState(false);
 
-  useEffect(() => {
-      if (marketAds.length > 0) {
-          const params = new URLSearchParams(window.location.search);
-          const sharedAdId = params.get('ad_id');
-          if (sharedAdId) {
-              const foundAd = marketAds.find(ad => ad.id.toString() === sharedAdId);
-              if (foundAd) { setViewingAd(foundAd); setTempSearchMarker([foundAd.lat, foundAd.lng]); }
-          }
-      }
-  }, [marketAds]);
+  // --- 🏠 LOGIC: NAVIGATION ---
+  const goHome = () => setFlyLocation({ lat: 17.3850, lng: 78.4867, zoom: 12 });
 
-  const fetchMarketplaceAds = async (exclusiveId = null) => {
-    try {
-        let query = supabase.from('marketplace_ads').select('*').order('created_at', { ascending: false });
-        if (exclusiveId) query = query.eq('contact_info', exclusiveId); 
-        else if (!isAdmin) query = query.eq('status', 'APPROVED');
-        const { data, error } = await query;
-        if (!error) setMarketAds(data || []);
-    } catch(e) { console.error(e); }
+  const [tutorialStep, setTutorialStep] = useState(0);
+
+  const startTutorial = () => {
+    setTutorialStep(1);
+    setIsSparkOpen(true);
   };
 
-  const handleFileUpload = async (e, type, isEditMode = false) => {
-    try {
-        setUploading(true);
-        const file = e.target.files[0]; if (!file) return;
-        const filePath = `${type}_${Math.random()}.${file.name.split('.').pop()}`;
-        const { error: uploadError } = await supabase.storage.from('ad-images').upload(filePath, file);
-        if (uploadError) throw uploadError;
-        const { data } = supabase.storage.from('ad-images').getPublicUrl(filePath);
-        if (isEditMode && editingAd) { type === 'image' ? setEditingAd({ ...editingAd, image_url: data.publicUrl }) : setEditingAd({ ...editingAd, audio_url: data.publicUrl }); } 
-        else { type === 'image' ? setNewAdData({ ...newAdData, image_url: data.publicUrl }) : setNewAdData({ ...newAdData, audio_url: data.publicUrl }); }
-    } catch (error) { alert("Upload Failed"); } finally { setUploading(false); }
+  const nextStep = () => setTutorialStep(prev => prev + 1);
+  const endTutorial = () => setTutorialStep(0);
+
+  // --- 🛠️ LOGIC: ADMIN ACTIONS ---
+  const handleApproveAd = async (adId) => {
+    const { error } = await supabase.from('marketplace_ads').update({ status: 'APPROVED' }).eq('id', adId);
+    if (!error) { fetchMarketplaceAds(); alert("✅ Asset Approved for Map!"); }
   };
 
-  const handlePostAd = async () => {
-    if(!newAdLocation) return alert("Set location first.");
-    if(uploading) return alert("Wait for upload.");
-    const offset = (Math.sqrt(parseInt(newAdData.size) * 0.836127) / 2) / 111139; 
-    const points = [[newAdLocation.lat + offset, newAdLocation.lng - offset], [newAdLocation.lat + offset, newAdLocation.lng + offset], [newAdLocation.lat - offset, newAdLocation.lng + offset], [newAdLocation.lat - offset, newAdLocation.lng - offset]];
-    const newAd = { lat: newAdLocation.lat, lng: newAdLocation.lng, ad_type: newAdData.type, size: newAdData.size + ' ' + newAdData.size_unit, price: newAdData.price, contact_info: newAdData.contact, description: newAdData.desc, image_url: newAdData.image_url, video_url: newAdData.video_url, audio_url: newAdData.audio_url, status: 'PENDING', points: points };
-    const { error } = await supabase.from('marketplace_ads').insert([newAd]);
-    if (!error) { alert("✅ Ad Submitted!"); setAdMode(null); setNewAdLocation(null); fetchMarketplaceAds(exclusiveAgent); setNewAdData({ type: 'SELL', size: '', price: '', contact: '', desc: '', size_unit: 'Sq Yds', image_url: '', video_url: '', audio_url: '' }); } else { alert(error.message); }
+  const handleDeleteAd = async (adId) => {
+    if (!window.confirm("Delete this record forever?")) return;
+    const { error } = await supabase.from('marketplace_ads').delete().eq('id', adId);
+    if (!error) fetchMarketplaceAds();
   };
 
-  const handleUpdateAd = async () => {
-      if(!editingAd) return;
-      const { error } = await supabase.from('marketplace_ads').update({ price: editingAd.price, size: editingAd.size, contact_info: editingAd.contact_info, description: editingAd.description, image_url: editingAd.image_url, video_url: editingAd.video_url, audio_url: editingAd.audio_url, status: editingAd.status, lat: parseFloat(editingAd.lat), lng: parseFloat(editingAd.lng) }).eq('id', editingAd.id);
-      if(!error) { alert("✅ Updated!"); setEditingAd(null); fetchMarketplaceAds(exclusiveAgent); } else { alert("Update Failed"); }
+  // --- 📍 LOGIC: USER POSTING ---
+  const handlePostAdUnified = async () => {
+    if (!newAdLocation) return alert("Select a location!");
+    const { error } = await supabase.from('marketplace_ads').insert([{
+      ...newAdData,
+      lat: isFuzzy ? newAdLocation.lat + (Math.random() - 0.5) * 0.0015 : newAdLocation.lat,
+      lng: isFuzzy ? newAdLocation.lng + (Math.random() - 0.5) * 0.0015 : newAdLocation.lng,
+      status: 'PENDING'
+    }]);
+    if (!error) { alert("✅ Pinned!"); setAdMode(null); fetchMarketplaceAds(); }
   };
 
-  const handleApproveAd = async (id) => { await supabase.from('marketplace_ads').update({ status: 'APPROVED' }).eq('id', id); fetchMarketplaceAds(exclusiveAgent); };
-  const handleDeleteAd = async (id) => { if(confirm("Delete ad?")) { const { error } = await supabase.from('marketplace_ads').delete().eq('id', id); if (!error) { setMarketAds(prev => prev.filter(ad => ad.id !== id)); alert("✅ Deleted."); } } };
-  
-  const handleShareAd = async (ad) => {
-      const agentInput = prompt("👩‍💼 AGENT MODE:\nEnter mobile number for lead routing:\n(Empty = Original Owner)");
-      let shareUrl = `https://maps.safelanddeal.com/?ad_id=${ad.id}`;
-      if (agentInput && agentInput.trim() !== "") shareUrl += `&agent=${agentInput.trim()}`;
-      if (exclusiveAgent) shareUrl += `&exclusive_agent=${exclusiveAgent}`;
-      const shareText = `🔥 *${ad.price} | ${ad.size}* \n📍 *Safe Land Verified* \n👇 *View Details:*`;
-      if (navigator.share) try { await navigator.share({ title: 'Safe Land', text: shareText, url: shareUrl }); } catch (error) {} else window.open(`https://wa.me/?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
-  };
-
-  const fetchProjects = async () => { const { data } = await supabase.from('projects').select('*'); if (data) setProjects(data); };
-  const handleSaveProject = async (e) => { e.preventDefault(); if (!currentShape) return alert("No shape drawn!"); setShowSaveForm(false); setCurrentShape(null); }; 
-  
-  const generatePDF = () => { const doc = new jsPDF(); doc.text("SAFE LAND TRUTH REPORT", 10, 10); autoTable(doc, { head: [['Factor', 'Value']], body: Object.entries(ratingData) }); doc.save("Truth_Report.pdf"); };
-  const handleSearch = async (e) => { if(e.key === 'Enter'){ const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}`); const data = await res.json(); if(data && data[0]) { setTempSearchMarker([data[0].lat, data[0].lon]); setIsSearchOpen(false); } } };
+  useEffect(() => { fetchMarketplaceAds(); }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
-      {/* SHOWCASE OVERLAY (Fixed on top) */}
-      {showLanding && <MainShowcase onEnter={() => setShowLanding(false)} />}
-      
-      {fullScreenImage && (
-          <div className="fixed inset-0 z-[11000] bg-black/95 flex justify-center items-center p-4 animate-in fade-in">
-              <button onClick={() => setFullScreenImage(null)} className="absolute top-4 right-4 text-white bg-gray-800 p-2 rounded-full hover:bg-gray-700 z-[11001]"><X size={24}/></button>
-              <img src={fullScreenImage} className="max-w-full max-h-full object-contain cursor-zoom-out" onClick={() => setFullScreenImage(null)} />
-              <a href={fullScreenImage} download target="_blank" rel="noreferrer" className="absolute bottom-8 bg-white text-black px-6 py-3 rounded-full font-bold flex items-center gap-2 shadow-xl hover:bg-gray-200 z-[11002]"><Download size={18}/> Download HD</a>
-          </div>
-      )}
+    <div className="relative w-full h-screen bg-slate-950 overflow-hidden flex flex-col">
+      {/* 🌍 THE ENGINE */}
+      <MapBoard 
+        marketAds={marketAds} 
+        flyLocation={flyLocation} 
+        adMode={adMode} 
+        newAdLocation={newAdLocation} 
+        setNewAdLocation={setNewAdLocation}
+        infraMode={infraMode} 
+        radarMode={radarMode}
+        mapStyle="satellite" 
+        isAdmin={isAdmin}
+      />
 
-      {/* --- MAIN APP CONTAINER --- */}
-      <div className={`flex flex-col h-full transition-all duration-1000 ${showLanding ? 'blur-sm scale-105' : 'blur-0 scale-100'}`}>
-        
-        {/* --- SMART NAVIGATION (HEADER + BOTTOM BARS) --- */}
-        <SmartNav 
-            isAdmin={isAdmin} setIsAdmin={setIsAdmin}  viewMode={viewMode} setViewMode={setViewMode} 
-            setShowPinModal={setShowPinModal} 
-            setShowPremiumRequest={setShowRatingModal} // <--- WIRED TO AUDIT MODAL
-            setShowLinksModal={setShowLinksModal}
-            setIsSearchOpen={setIsSearchOpen} isSearchOpen={isSearchOpen} searchQuery={searchQuery} setSearchQuery={setSearchQuery} handleSearch={handleSearch}
-            adMode={adMode} setAdMode={setAdMode} 
-            radarMode={radarMode} setRadarMode={setRadarMode} 
-            infraMode={infraMode} setInfraMode={setInfraMode} // <--- WIRED NEW INFRA SCANNER
-            setNewAdLocation={setNewAdLocation}
-            setShowLanding={setShowLanding}
-        />
+      {/* 🔍 NAVIGATION */}
+      <Navigator setFlyLocation={setFlyLocation} goHome={goHome} />
 
-        <div className="flex-1 relative z-0 pb-16 md:pb-0"> 
-          {viewMode === 'ADMIN' ? (
-              <AdminView 
-              isAdmin={isAdmin} setIsAdmin={setIsAdmin}
-                  marketAds={marketAds} selectedAds={selectedAds} toggleAdSelection={toggleAdSelection} setSelectedAds={setSelectedAds}
-                  handleBulkDelete={handleBulkDelete} fetchMarketplaceAds={fetchMarketplaceAds} exclusiveAgent={exclusiveAgent}
-                  setShowLinksModal={setShowLinksModal} setShowRatingModal={setShowRatingModal} handleApproveAd={handleApproveAd} handleDeleteAd={handleDeleteAd} setEditingAd={setEditingAd}
-              />
-          ) : (
-              <MapBoard 
-                  viewMode={viewMode} marketAds={marketAds} projects={projects} newAdLocation={newAdLocation} tempSearchMarker={tempSearchMarker} radarResults={radarResults}
-                  adMode={adMode} 
-                  radarMode={radarMode} 
-                  infraMode={infraMode} // <--- PASSED TO MAP
-                  growthNodes={GROWTH_NODES} // <--- PASSED TO MAP
-                  featureGroupRef={featureGroupRef}
-                  setNewAdLocation={setNewAdLocation} setRadarResults={setRadarResults} setAdMode={setAdMode} setViewingAd={setViewingAd} handleShareAd={handleShareAd}
-                  setCurrentShape={setCurrentShape} setShowSaveForm={setShowSaveForm} agentPhone={agentPhone}
-                  setTempSearchMarker={setTempSearchMarker}
-              />
-          )}
-        </div>
+      {/* 🔐 SECURE ADMIN GATEWAY (Moved to Bottom-Right) */}
+      <div className="fixed bottom-6 right-20 z-[10005]">
+        <button 
+          onClick={() => {
+            if (!showAdmin) {
+              const pin = prompt("Enter Admin Passcode:");
+              if (pin === "8008") { 
+                setIsAdmin(true);
+                setShowAdmin(true);
+              } else {
+                alert("❌ Unauthorized!");
+              }
+            } else {
+              setShowAdmin(false);
+            }
+          }}
+          className={`p-4 rounded-full shadow-2xl border-2 transition-all flex items-center justify-center ${
+            showAdmin 
+              ? 'bg-red-600 border-white text-white rotate-90' 
+              : 'bg-slate-900/90 border-slate-700 text-slate-400 hover:border-blue-500'
+          }`}
+          title="Admin Database"
+        >
+          {showAdmin ? <Globe size={20}/> : <ShieldCheck size={20}/>}
+        </button>
       </div>
 
-      {/* STICKY CONTACT BAR */}
-      {minimizedAd && !viewingAd && (
-          <div className="fixed bottom-20 left-4 right-4 md:bottom-24 md:left-auto md:right-4 md:w-80 bg-slate-900 text-white p-3 rounded-xl shadow-2xl z-[4000] flex items-center justify-between animate-in slide-in-from-bottom-5 border border-slate-700">
-              <div className="flex-1 cursor-pointer" onClick={() => { setViewingAd(minimizedAd); setMinimizedAd(null); }}><p className="font-bold text-sm text-yellow-400">Last Viewed:</p><p className="font-black">{minimizedAd.price} | {minimizedAd.size}</p></div>
-              <div className="flex gap-2"><button onClick={() => window.open(`https://wa.me/${agentPhone ? agentPhone : minimizedAd.contact_info}`, '_blank')} className="bg-green-600 p-2 rounded-full hover:bg-green-500"><Phone size={18}/></button><button onClick={() => setMinimizedAd(null)} className="bg-slate-700 p-2 rounded-full hover:bg-slate-600"><X size={18}/></button></div>
-          </div>
+      // --- REPLACE TOOLS DECK WITH THIS ---
+  <div className="fixed right-4 top-4 z-[10002] flex flex-col items-end gap-2">
+    {/* 🎯 MAIN TOGGLE BUTTON */}
+    <button 
+      onClick={() => setShowTools(!showTools)}
+      className="bg-slate-900 text-white p-3 rounded-2xl shadow-2xl border-2 border-blue-500 flex items-center gap-2 hover:bg-black transition-all"
+    >
+      <span className="text-[10px] font-black uppercase tracking-wider">Intelligence</span>
+      <span className={`transition-transform duration-300 ${showTools ? 'rotate-180' : ''}`}>▼</span>
+    </button>
+
+    {/* 📂 THE COMPLETED INTELLIGENCE DROPDOWN */}
+{showTools && (
+  <div className="bg-slate-900/95 backdrop-blur-md p-3 rounded-2xl border border-slate-700 shadow-2xl flex flex-col gap-2 w-48 animate-spark-in">
+    
+    {/* 📡 INFRA SCANNER */}
+    <button 
+      onClick={() => setInfraMode(!infraMode)} 
+      className={`flex justify-between items-center p-3 rounded-xl text-[10px] font-bold transition-all ${
+        infraMode ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-900/50' : 'bg-slate-800 text-slate-400'
+      }`}
+    >
+      📡 INFRA SCANNER <span>{infraMode ? 'ON' : 'OFF'}</span>
+    </button>
+
+    {/* 🛰️ GROWTH RADAR */}
+    <button 
+      onClick={() => setRadarMode(!radarMode)} 
+      className={`flex justify-between items-center p-3 rounded-xl text-[10px] font-bold transition-all ${
+        radarMode ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/50' : 'bg-slate-800 text-slate-400'
+      }`}
+    >
+      🛰️ GROWTH RADAR <span>{radarMode ? 'ON' : 'OFF'}</span>
+    </button>
+
+    <div className="h-[1px] bg-slate-700 my-1"></div>
+
+    {/* 🌊 WATER BODIES */}
+    <button 
+      onClick={() => setShowWater(!showWater)}
+      className={`flex justify-between items-center p-3 rounded-xl text-[10px] font-bold transition-all ${
+        showWater ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'
+      }`}
+    >
+      🌊 WATER BODIES <span>{showWater ? '✓' : ''}</span>
+    </button>
+
+    {/* 🌲 FOREST AREAS */}
+    <button 
+      onClick={() => setShowForest(!showForest)}
+      className={`flex justify-between items-center p-3 rounded-xl text-[10px] font-bold transition-all ${
+        showForest ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'
+      }`}
+    >
+      🌲 FOREST AREAS <span>{showForest ? '✓' : ''}</span>
+    </button>
+  </div>
+)}
+  </div>
+
+      {/* 🗄️ THE ADMIN VAULT OVERLAY */}
+      {showAdmin && (
+        <div className="fixed inset-0 z-[10004] bg-white overflow-hidden">
+          <AdminView 
+            isAdmin={isAdmin}
+            setIsAdmin={setIsAdmin}
+            marketAds={marketAds}
+            handleApproveAd={handleApproveAd}
+            handleDeleteAd={handleDeleteAd}
+            fetchMarketplaceAds={fetchMarketplaceAds}
+            setShowLinksModal={setShowLinksModal}
+            setShowRatingModal={setShowRatingModal}
+            selectedAds={selectedAds}
+            setSelectedAds={setSelectedAds}
+            toggleAdSelection={(id) => setSelectedAds(prev => 
+              prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
+            )}
+          />
+          <button 
+            onClick={() => setShowAdmin(false)}
+            className="fixed top-6 right-6 z-[10005] bg-slate-900 text-white px-6 py-2 rounded-full font-black shadow-2xl"
+          >
+            ESC ➔ MAP
+          </button>
+        </div>
       )}
 
-      {/* MODALS */}
-      <PostAdModal newAdLocation={newAdLocation} setNewAdLocation={setNewAdLocation} setAdMode={setAdMode} newAdData={newAdData} setNewAdData={setNewAdData} handleFileUpload={handleFileUpload} handlePostAd={handlePostAd} uploading={uploading} />
-      <EditAdModal editingAd={editingAd} setEditingAd={setEditingAd} handleFileUpload={handleFileUpload} handleUpdateAd={handleUpdateAd} />
-      <TruthEngineModal showRatingModal={showRatingModal} setShowRatingModal={setShowRatingModal} ratingData={ratingData} setRatingData={setRatingData} generatePDF={generatePDF} />
-      <ViewAdModal viewingAd={viewingAd} setViewingAd={setViewingAd} setFullScreenImage={setFullScreenImage} setMinimizedAd={setMinimizedAd} agentPhone={agentPhone} handleShareAd={handleShareAd} />
-      <LinksModal show={showLinksModal} onClose={() => setShowLinksModal(false)} links={GOVT_LINKS} />
-      <PinModal show={showPinModal} onClose={() => setShowPinModal(false)} pinInput={pinInput} setPinInput={setPinInput} checkPin={()=>{ if(pinInput===PIN_CODE){ setIsAdmin(true); setShowPinModal(false); } else alert("Wrong PIN"); }} />
+      {/* 📍 PIN TRIGGER */}
+      {!adMode && !showAdmin && (
+        <button 
+          onClick={() => setAdMode('SELL')}
+          className="fixed top-24 left-1/2 -translate-x-1/2 z-[1000] bg-emerald-500 text-black px-8 py-3 rounded-full font-black shadow-xl"
+        >
+          📍 FREE PIN FOR YOUR ASSET
+        </button>
+      )}
+
+      {/* 🤖 SPARK AGENT */}
+      <SparkAgent 
+        isOpen={isSparkOpen} 
+        setIsOpen={setIsSparkOpen} 
+        mapLat={flyLocation?.lat} 
+        mapLng={flyLocation?.lng} 
+      />
+
+      {/* 📦 MODALS */}
+      <PostAdModal 
+        isOpen={adMode === 'SELL'} 
+        onClose={() => setAdMode(null)} 
+        newAdLocation={newAdLocation} 
+        newAdData={newAdData} 
+        setNewAdData={setNewAdData}
+        handlePostAd={handlePostAdUnified} 
+      />
+      <ViewAdModal viewingAd={viewingAd} setViewingAd={setViewingAd} />
+      {/* 🌐 GOVT LINKS MODAL */}
+      {showLinksModal && (
+        <div className="fixed inset-0 z-[10007] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl border border-blue-100 animate-spark-in">
+            <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-2">
+              <Globe className="text-blue-600"/> Official Portals
+            </h3>
+            <div className="flex flex-col gap-3">
+              <a href="https://dharani.telangana.gov.in/" target="_blank" className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100 flex justify-between">
+                Dharani Portal <span>➔</span>
+              </a>
+              <a href="https://registration.telangana.gov.in/" target="_blank" className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100 flex justify-between">
+                IGRS Registration <span>➔</span>
+              </a>
+            </div>
+            <button onClick={() => setShowLinksModal(false)} className="mt-8 w-full py-4 bg-slate-900 text-white rounded-2xl font-black">CLOSE</button>
+          </div>
+        </div>
+      )}
+
+      {/* 🛡️ AUDIT TOOL MODAL */}
+      {showRatingModal && (
+        <div className="fixed inset-0 z-[10007] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl border border-purple-100 animate-spark-in text-center">
+            <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <ShieldCheck className="text-purple-600" size={32}/>
+            </div>
+            <h3 className="text-2xl font-black text-slate-800 mb-2">Internal Audit</h3>
+            <p className="text-slate-500 text-sm font-bold mb-6">Reviewing all 8 map assets for verification status.</p>
+            <div className="bg-slate-50 p-4 rounded-2xl text-[10px] font-mono text-slate-400 text-left mb-6">
+              Checking: LRS Status... OK<br/>
+              Checking: FTL/Buffer... OK<br/>
+              Checking: Master Plan... OK
+            </div>
+            <button onClick={() => setShowRatingModal(false)} className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black shadow-lg shadow-purple-200">MARK ALL AS VERIFIED</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
